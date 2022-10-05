@@ -49,50 +49,44 @@ def umicount():
                         help="number of cores for multiprocessing")
     results = parser.parse_args()
 
-    infiles = results.files
-    colnames = results.columns
-    gtffile = results.gtf
-    dumpgtf = results.dumpgtf
-    skipgtf = results.skipgtf
-    skipdup = results.nodupes
-    outfile = results.output
-    outgeneformat = results.outgeneformat
-    numcores = results.cores
-
-    if colnames:
-        assert len(colnames) == len(infiles), "column names and file names have different lengths"
+    if results.columns:
+        assert len(results.columns) == len(results.files), "column names and file names have different lengths"
+        colnames = results.columns
     else:
-        colnames = list(map(os.path.basename, infiles))
+        colnames = list(map(os.path.basename, results.files))
 
-    if gtffile:
-        if skipgtf:
+    if results.gtf:
+        if results.skipgtf:
             print('--gtf and --skipgtf given, will read from skipgtf')
-        elif not os.path.exists(gtffile):
+        elif not os.path.exists(results.gtf):
             print('invalid GTF file path, exiting')
             sys.exit()
 
-    if skipgtf:
-        if not os.path.exists(skipgtf):
+    if results.skipgtf:
+        if not os.path.exists(results.skipgtf):
             print('invalid --skipgtf file path, exiting')
             sys.exit()
 
-    if [gtffile, skipgtf] == [None, None]:
+    if [results.gtf, results.skipgtf] == [None, None]:
         print('require one of --gtf, --skipgtf')
         sys.exit()
 
-    if numcores < 1:
+    if results.cores < 1:
         print('invalid number of cores, exiting')
         sys.exit()
 
-    if not outgeneformat in ['geneid', 'genename']:
+    if not results.outgeneformat in ['geneid', 'genename']:
         print("invalid --outgeneformat, use one of 'geneid' or 'genename'")
         sys.exit()
 
-    if len(infiles) == 0 and not gtffile:
+    if len(results.files) == 0 and not results.gtf:
         print('no input files found, skipping input only valid with --gtf')
         sys.exit()
-    for i in infiles:
+    for i in results.files:
         if not os.path.exists(i):
             print('file %s not found, exiting' %i)
             sys.exit()
-    process_bam(infiles, gtffile, outfile, numcores, dumpgtf, skipdup, colnames, outgeneformat)
+
+    process_bam(results.files, results.gtf, results.output, results.cores,
+                results.dumpgtf, results.nodupes, colnames,
+                results.outgeneformat)
