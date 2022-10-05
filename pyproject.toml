@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "umicount"
+version = "0.1.0"
+description = "umi counting tool for SmartSeq3 libraries"
+authors = ["Leo Förster <leoforster@gmail.com>"]
+keywords = ["biology", "bioinformatics", "single cell", "transcriptomics", "smartseq3"]
+maintainers = ["Leo Förster <leoforster@gmail.com>", "Jooa Hooli <code@jooa.xyz>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.7"
+HTSeq = "^0.11.2"
+pysam = "^0.16.0"
+
+[tool.poetry.scripts]
+umicount = "umicount.cli:umicount"
+process_smartseq = "umicount.cli:process_smartseq"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
