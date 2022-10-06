@@ -190,7 +190,7 @@ def parse_bam_and_count(bamfile, skipgtf):
 
     return gcounts
 
-def process_bam(infiles, gtffile, outfile, numcores, dumpgtf, skipdup, colnames, outgeneformat):
+def process_bam(infiles, gtffile, outfile, numcores, dumpgtf, skipgtf, skipdup, colnames, outgeneformat):
     # parse gtf and get data structures
     global BASECOLS
     if not skipgtf:

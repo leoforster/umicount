@@ -88,5 +88,5 @@ def umicount():
             sys.exit()
 
     process_bam(results.files, results.gtf, results.output, results.cores,
-                results.dumpgtf, results.nodupes, colnames,
+                results.dumpgtf, results.skipgtf, results.nodupes, colnames,
                 results.outgeneformat)
