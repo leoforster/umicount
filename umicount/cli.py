@@ -4,7 +4,7 @@ import argparse
 import sys
 import os
 
-from .process_smartseq import process_fasta
+from .umiextract import process_fastx
 from .umicount import process_bam
 
 
@@ -22,7 +22,7 @@ def process_smartseq():
                         help="only output UMI-containing PE reads")
     results = parser.parse_args()
 
-    process_fasta((results.read1, results.read2),
+    process_fastx((results.read1, results.read2),
                 (results.r1_out, results.r2_out),
                 results.umilen, results.only_umi)
 
