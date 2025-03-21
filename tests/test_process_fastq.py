@@ -2,7 +2,7 @@ import pytest
 import gzip
 import tempfile
 import os
-import pysam
+import HTSeq as htseq
 
 from umicount.umiextract import process_fastq
 
@@ -38,10 +38,8 @@ def test_process_fastq_basic():
         process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), umilen=4, only_umi=False)
 
         # Read the output
-        with pysam.FastxFile(r1_out_path) as f:
+        with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
-
-        print([i.name for i in out_reads])
 
         assert len(out_reads) == 3
         assert out_reads[0].name.endswith("_ACGT")
@@ -63,8 +61,7 @@ def test_process_fastq_umilen():
 
         process_fastq((r1_path, None), (r1_out_path, None), umilen=6, only_umi=False)
 
-        # Read the output
-        with pysam.FastxFile(r1_out_path) as f:
+        with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
 
         assert len(out_reads) == 2
@@ -84,7 +81,7 @@ def test_process_fastq_empty_input():
 
         process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), umilen=4, only_umi=False)
 
-        with pysam.FastxFile(r1_out_path) as f:
+        with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
 
         assert len(out_reads) == 0
@@ -102,7 +99,7 @@ def test_process_fastq_malformed_fastq():
 
         write_fastq(r1_path, r1_reads)
 
-        with pytest.raises(ValueError):  # pysam raises error
+        with pytest.raises(ValueError):  # parser raises error
             process_fastq((r1_path, None), (r1_out_path, None), umilen=4, only_umi=False)
 
 def test_process_fastq_no_matching_umi():
@@ -120,7 +117,7 @@ def test_process_fastq_no_matching_umi():
 
         process_fastq((r1_path, None), (r1_out_path, None), umilen=4, only_umi=True)
 
-        with pysam.FastxFile(r1_out_path) as f:
+        with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
 
         assert len(out_reads) == 0  # No UMI, so no reads should be written
@@ -163,7 +160,7 @@ def test_process_fastq_empty_sequences():
 
         process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), umilen=4, only_umi=False)
 
-        with pysam.FastxFile(r1_out_path) as f:
+        with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
 
         assert len(out_reads) == 0  # Both sequences should be removed
