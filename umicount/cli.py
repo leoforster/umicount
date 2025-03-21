@@ -4,11 +4,11 @@ import argparse
 import sys
 import os
 
-from .umiextract import process_fastx
+from .umiextract import process_fastq
 from .umicount import process_bam
 
 
-def process_smartseq():
+def umiextract():
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("-1", "--read1", action="store", required=True,
                         help="input smartseq3 read1 fastq")
@@ -19,12 +19,12 @@ def process_smartseq():
     parser.add_argument("--umilen", action="store", type=int, default=12,
                         help="umi length in bp")
     parser.add_argument("-u", "--only_umi", action="store_true", default=False,
-                        help="only output UMI-containing PE reads")
+                        help="only output UMI-containing reads")
     results = parser.parse_args()
 
-    process_fastx((results.read1, results.read2),
-                (results.r1_out, results.r2_out),
-                results.umilen, results.only_umi)
+    process_fastq((results.read1, results.read2),
+                  (results.r1_out, results.r2_out),
+                  results.umilen, results.only_umi)
 
 def umicount():
     parser = argparse.ArgumentParser(description="")
