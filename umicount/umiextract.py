@@ -22,7 +22,7 @@ def get_fastq_str(swq):
     fastq_str = b''
     fastq_str += ("@%s\n" % swq.name).encode()
     fastq_str += (swq.seq + newline)
-    fastq_str += (newline)
+    fastq_str += ('+'.encode() + newline)
     fastq_str += (swq.qualstr + newline)
     return fastq_str
 
@@ -67,7 +67,7 @@ def process_fastq(paths, outnames, umilen, only_umi, pre_umi_seq='ATTGCGCAATG', 
             if only_umi and not m:
                 continue
             else:
-                r1_out.write(get_fastq_str(entry)) # returns a byte string
+                r1_out.write(get_fastq_str(entry)) # encoded
                 r1count += 1
 
     if r2_path:
