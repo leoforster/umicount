@@ -9,12 +9,11 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.7"
-HTSeq = "^2.0"
-pysam = "^0.20"
+HTSeq = "^2"
 
 [tool.poetry.scripts]
 umicount = "umicount.cli:umicount"
-process_smartseq = "umicount.cli:process_smartseq"
+umiextract = "umicount.cli:umiextract"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^5"
