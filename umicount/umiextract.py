@@ -3,6 +3,7 @@ import os
 import re
 import gzip
 import HTSeq as htseq
+from contextlib import nullcontext
 
 def slice_SequenceWithQualities(swq, start=None):
     # override SequenceWithQualities.__getitem__ behavior that appends [part] to swq.name when slicing
@@ -26,68 +27,91 @@ def get_fastq_str(swq):
     fastq_str += (swq.qualstr + newline)
     return fastq_str
 
-def process_fastq(paths, outnames, umilen, only_umi, pre_umi_seq='ATTGCGCAATG', post_umi_seq='GGG'):
+def process_entry(entry, umi_pattern, umi_len, only_umi, pre_umi_seq):
+    # extract and trim UMI if present
+
+    seq_str = entry.seq.decode("utf-8")
+    match = umi_pattern.search(seq_str)
+    if not match:
+        return (None, None) if only_umi else (entry, None)
+
+    m_start, m_end = match.span()
+    if m_end == len(seq_str):
+        return None, None  # entire read is just UMI + flanking, skip
+
+    umi = match.group(0)[len(pre_umi_seq):len(pre_umi_seq) + umi_len]
+
+    entry_processed = slice_SequenceWithQualities(entry, m_end)
+    entry_processed.name += '_' + umi
+    return entry_processed, umi
+
+def none_gen():
+    while True:
+        yield None
+
+def process_fastq(paths, outnames, umi_len, only_umi, 
+                  pre_umi_seq='ATTGCGCAATG', 
+                  post_umi_seq='GGG'):
+
     r1_path, r2_path = paths
-    ss3_regex = "(%s)[NGCAT]{%s}(%s)" % (pre_umi_seq, umilen, post_umi_seq)
+    r1_out_path, r2_out_path = outnames
+
+    readcount = 0
     umicount = 0
-    read_umis = {}
-    empty_sequences = {}
+    reads_written = 0
 
-    r1_out = gzip.open(outnames[0], 'wb')
-    r2_out = gzip.open(outnames[1], 'wb') if outnames[1] else None
+    # precompile regex
+    umi_pattern = re.compile(f"({pre_umi_seq})[NGCAT]{{{umi_len}}}({post_umi_seq})")
 
-    r1count = 0
-    with htseq.FastqReader(r1_path) as r1_in:
-        for n, entry in enumerate(r1_in):
-            entry_seq_str = entry.seq.decode("utf-8")
+    # prepare output files
+    r1_out = gzip.open(r1_out_path, 'wb')
+    r2_out = gzip.open(r2_out_path, 'wb') if r2_path and r2_out_path else None
 
-            try:
-                x = read_umis[entry.name]
-                print('non-unique read name: %s' % entry.name)
-                print('exiting')
-                sys.exit()
-            except KeyError:
-                read_umis[entry.name] = None
+    # setup fastq readers: if not using R2 we set it to a null generator
+    r1_reader = htseq.FastqReader(r1_path)
+    r2_context = htseq.FastqReader(r2_path) if r2_path else nullcontext(none_gen())
 
-            m = re.search(ss3_regex, entry_seq_str)
-            if m:
+    # traverse both files in tandem
+    with r1_reader as r1_in, r2_context as r2_in:
+
+        for entry1, entry2 in zip(r1_in, r2_in):
+
+            readcount += 1
+            entry1_processed, umi = process_entry(entry1, umi_pattern, 
+                                                  umi_len, only_umi, pre_umi_seq)
+            
+            if entry1_processed is None: # case when entire read is UMI + flanking
+                continue
+
+            if umi:
                 umicount += 1
-                match = m.group(0)
-                mpos = m.span()[1]
-                umi = match[len(pre_umi_seq):(len(pre_umi_seq) + umilen)]
-                read_umis[entry.name] = umi
 
-                if mpos == len(entry_seq_str):
-                    empty_sequences[entry.name] = 1
-                    continue
+            # handle R2 readname: check it matches R1, also add umi
+            if entry2 is not None:
+                if entry1.name != entry2.name:
+                    print('readname mismatch in R1 and R2 at read number %s' %readcount)
+                    sys.exit()
 
-                entry.name = entry.name + "_" + umi
-                entry = slice_SequenceWithQualities(entry, mpos) # avoid HTSeq appending '[part]'
+                if umi:
+                    entry2.name += '_' + umi
 
-            if only_umi and not m:
+            # write output
+            if only_umi and umi is None:
                 continue
             else:
-                r1_out.write(get_fastq_str(entry)) # encoded
-                r1count += 1
+                r1_out.write(get_fastq_str(entry1_processed))
 
-    if r2_path:
-        r2count = 0
-        with htseq.FastqReader(r2_path) as r2_in:
-            for n, entry in enumerate(r2_in):
-                if entry.name in empty_sequences:
-                    continue
+                if r2_out and entry2 is not None:
+                    r2_out.write(get_fastq_str(entry2))
 
-                if entry.name in read_umis and read_umis[entry.name]:
-                    umi = read_umis[entry.name]
-                    entry.name = entry.name + "_" + umi
-                else:
-                    if only_umi:
-                        continue
+                reads_written += 1
 
-                r2_out.write(get_fastq_str(entry))
-                r2count += 1
-
-    print(umicount, "umis,", r1count, "reads written,", len(empty_sequences.keys()), "reads removed")
+    if readcount > 0:
+        print(f"{readcount} reads: {umicount} with UMI ({(umicount/readcount)*100:.2f}%), \
+              {reads_written} written ({(reads_written/readcount)*100:.2f}% skipped)")
+    else:
+        print(f"empty input file")
+    
     r1_out.close()
     if r2_out:
         r2_out.close()
