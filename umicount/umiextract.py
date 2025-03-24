@@ -59,6 +59,7 @@ def process_fastq(paths, outnames, umi_len, only_umi,
     readcount = 0
     umicount = 0
     reads_written = 0
+    readnames = set()
 
     # precompile regex
     umi_pattern = re.compile(f"({pre_umi_seq})[NGCAT]{{{umi_len}}}({post_umi_seq})")
@@ -75,8 +76,16 @@ def process_fastq(paths, outnames, umi_len, only_umi,
     with r1_reader as r1_in, r2_context as r2_in:
 
         for entry1, entry2 in zip(r1_in, r2_in):
-
             readcount += 1
+
+            # check for duplicated R1 readname, R2 is checked for consistency below
+            if entry1.name in readnames:
+                print('duplicate R1 name found at read number %s' %readcount)
+                sys.exit()
+            else:
+                readnames.add(entry1.name)
+
+            # process R1 to search for UMI and trim
             entry1_processed, umi = process_entry(entry1, umi_pattern, 
                                                   umi_len, only_umi, pre_umi_seq)
             
