@@ -8,7 +8,7 @@ maintainers = ["Leo Förster <leoforster@gmail.com>", "Jooa Hooli <code@jooa.xyz
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.7"
+python = ">=3.10"
 HTSeq = "^2"
 
 [tool.poetry.scripts]
