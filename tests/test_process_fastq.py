@@ -35,7 +35,8 @@ def test_process_fastq_basic():
         write_fastq(r1_path, r1_reads)
         write_fastq(r2_path, r2_reads)
 
-        process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), umilen=4, only_umi=False)
+        process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), 
+                      umi_len=4, only_umi=False)
 
         # Read the output
         with htseq.FastqReader(r1_out_path) as f:
@@ -46,7 +47,7 @@ def test_process_fastq_basic():
         assert out_reads[1].name.endswith("_TTTT")
         assert out_reads[2].name == "seq3"
 
-def test_process_fastq_umilen():
+def test_process_fastq_umi_len():
     """Test processing for variable UMI length."""
     r1_reads = [
         ("seq1", "ATTGCGCAATGATTCGTGGGTTTTTT", "IIIIIIIIIIIIIIIIIIIIIIIIII"),
@@ -59,7 +60,8 @@ def test_process_fastq_umilen():
 
         write_fastq(r1_path, r1_reads)
 
-        process_fastq((r1_path, None), (r1_out_path, None), umilen=6, only_umi=False)
+        process_fastq((r1_path, None), (r1_out_path, None), 
+                      umi_len=6, only_umi=False)
 
         with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
@@ -79,7 +81,8 @@ def test_process_fastq_empty_input():
         write_fastq(r1_path, [])
         write_fastq(r2_path, [])
 
-        process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), umilen=4, only_umi=False)
+        process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), 
+                      umi_len=4, only_umi=False)
 
         with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
@@ -87,10 +90,10 @@ def test_process_fastq_empty_input():
         assert len(out_reads) == 0
 
 def test_process_fastq_malformed_fastq():
-    """Test that a duplicate read name raises an error."""
+    """Test that mismatched sequence and quality string lengths raise error"""
     r1_reads = [
         ("seq1", "ATTGCGCAATGACGTGGGTTTTTT", "IIIIIIIIIIIIIIIIIIIIII"),
-        ("seq1", "ATTGCGCAATGTTTTGGGCCCCCC", "IIIIIIIIIIIIIIIIIIIIIIII"),
+        ("seq2", "ATTGCGCAATGTTTTGGGCCCCCC", "IIIIIIIIIIIIIIIIIIIIIIII"),
     ]
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -100,7 +103,8 @@ def test_process_fastq_malformed_fastq():
         write_fastq(r1_path, r1_reads)
 
         with pytest.raises(ValueError):  # parser raises error
-            process_fastq((r1_path, None), (r1_out_path, None), umilen=4, only_umi=False)
+            process_fastq((r1_path, None), (r1_out_path, None), 
+                          umi_len=4, only_umi=False)
 
 def test_process_fastq_no_matching_umi():
     """Test processing when no UMI pattern is found."""
@@ -115,7 +119,8 @@ def test_process_fastq_no_matching_umi():
 
         write_fastq(r1_path, r1_reads)
 
-        process_fastq((r1_path, None), (r1_out_path, None), umilen=4, only_umi=True)
+        process_fastq((r1_path, None), (r1_out_path, None), 
+                      umi_len=4, only_umi=True)
 
         with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
@@ -136,7 +141,32 @@ def test_process_fastq_duplicate_read_name():
         write_fastq(r1_path, r1_reads)
 
         with pytest.raises(SystemExit):  # Should exit due to duplicate read name
-            process_fastq((r1_path, None), (r1_out_path, None), umilen=4, only_umi=False)
+            process_fastq((r1_path, None), (r1_out_path, None), 
+                          umi_len=4, only_umi=False)
+
+def test_process_fastq_mismatched_read_names():
+    """Test that mismatched R1 and R2 readnames raise an error."""
+    r1_reads = [
+        ("seq1", "ATTGCGCAATGACGTGGGACGTC", "IIIIIIIIIIIIIIIIIIIIIII"),
+        ("seq2", "ATTGCGCAATGTTTTGGGACGTG", "IIIIIIIIIIIIIIIIIIIIIII"),
+    ]
+    r2_reads = [
+        ("seq1", "GGGACGTAAAGGG", "IIIIIIIIIIIII"),
+        ("seq3", "GGGTTTTAAA", "IIIIIIIIII"),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        r1_path = os.path.join(tmpdir, "r1.fastq.gz")
+        r2_path = os.path.join(tmpdir, "r2.fastq.gz")
+        r1_out_path = os.path.join(tmpdir, "r1_out.fastq.gz")
+        r2_out_path = os.path.join(tmpdir, "r2_out.fastq.gz")
+
+        write_fastq(r1_path, r1_reads)
+        write_fastq(r2_path, r2_reads)
+
+        with pytest.raises(SystemExit):  # Should exit due to mismatched read names
+            process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), 
+                          umi_len=4, only_umi=False)
 
 def test_process_fastq_empty_sequences():
     """Test that empty sequences are properly removed."""
@@ -158,7 +188,8 @@ def test_process_fastq_empty_sequences():
         write_fastq(r1_path, r1_reads)
         write_fastq(r2_path, r2_reads)
 
-        process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), umilen=4, only_umi=False)
+        process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), 
+                      umi_len=4, only_umi=False)
 
         with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
