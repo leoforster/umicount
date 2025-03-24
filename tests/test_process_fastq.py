@@ -4,7 +4,12 @@ import tempfile
 import os
 import HTSeq as htseq
 
-from umicount.umiextract import process_fastq
+from umicount.umiextract import (
+    process_fastq,
+    process_entry,
+    slice_SequenceWithQualities,
+    get_fastq_str
+)
 
 # Helper function to write a FASTQ file
 def write_fastq(filename, reads):
@@ -12,7 +17,10 @@ def write_fastq(filename, reads):
         for read in reads:
             f.write(f"@{read[0]}\n{read[1]}\n+\n{read[2]}\n")
 
-# Test cases
+############################
+# Tests for process_fastq
+############################
+
 def test_process_fastq_basic():
     """Test processing with a simple valid case."""
     r1_reads = [
@@ -195,6 +203,25 @@ def test_process_fastq_empty_sequences():
             out_reads = [entry for entry in f]
 
         assert len(out_reads) == 0  # Both sequences should be removed
+
+############################
+# Tests for utility functions
+############################
+
+def test_slice_sequence_with_qualities():
+    """Test that slicing a SequenceWithQualities works as expected."""
+    read = htseq.SequenceWithQualities(b"ACGTACGT", "read1", b"IIIIIIII")
+    sliced = slice_SequenceWithQualities(read, 4)
+    assert sliced.seq == b"ACGT"
+    assert sliced.qualstr == b"IIII"
+    assert sliced.name == "read1"
+
+def test_get_fastq_str():
+    """Test that the FASTQ string is correctly generated."""
+    read = htseq.SequenceWithQualities(b"ACGT", "read1", b"IIII")
+    fastq = get_fastq_str(read)
+    expected = b"@read1\nACGT\n+\nIIII\n"
+    assert fastq == expected
 
 if __name__ == "__main__":
     pytest.main()
