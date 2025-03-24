@@ -49,7 +49,8 @@ def none_gen():
     while True:
         yield None
 
-def process_fastq(paths, outnames, umi_len, only_umi, 
+def process_fastq(paths, outnames, umi_len, 
+                  only_umi=False, 
                   pre_umi_seq='ATTGCGCAATG', 
                   post_umi_seq='GGG'):
 
@@ -116,8 +117,9 @@ def process_fastq(paths, outnames, umi_len, only_umi,
                 reads_written += 1
 
     if readcount > 0:
-        print(f"{readcount} reads: {umicount} with UMI ({(umicount/readcount)*100:.2f}%), \
-              {reads_written} written ({(reads_written/readcount)*100:.2f}% skipped)")
+        print( (f"{readcount} reads: {umicount} with UMI ({(umicount/readcount)*100:.2f}%), "
+                f"{reads_written} written "
+                f"({((readcount-reads_written)/readcount)*100:.2f}% skipped)") )
     else:
         print(f"empty input file")
     
