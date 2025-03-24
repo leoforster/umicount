@@ -70,10 +70,10 @@ def process_fastq(paths, outnames, umi_len, only_umi,
 
     # setup fastq readers: if not using R2 we set it to a null generator
     r1_reader = htseq.FastqReader(r1_path)
-    r2_context = htseq.FastqReader(r2_path) if r2_path else nullcontext(none_gen())
+    r2_reader = htseq.FastqReader(r2_path) if r2_path else nullcontext(none_gen())
 
     # traverse both files in tandem
-    with r1_reader as r1_in, r2_context as r2_in:
+    with r1_reader as r1_in, r2_reader as r2_in:
 
         for entry1, entry2 in zip(r1_in, r2_in):
             readcount += 1
