@@ -6,7 +6,7 @@ import HTSeq as htseq
 from contextlib import nullcontext
 
 def slice_SequenceWithQualities(swq, start=None):
-    # override SequenceWithQualities.__getitem__ behavior that appends [part] to swq.name when slicing
+    # override SequenceWithQualities.__getitem__ appending [part] to swq.name when slicing
     assert isinstance(swq, htseq.SequenceWithQualities)
 
     if start:
@@ -16,7 +16,7 @@ def slice_SequenceWithQualities(swq, start=None):
 
 def get_fastq_str(swq):
     # replace SequenceWithQualities.get_fastq_str to not depend on cStringIO
-    # otherwise code is adapted from SequenceWithQualities.write_to_fastq_file, which actually creates the fastq string...
+    # otherwise code is adapted from SequenceWithQualities.write_to_fastq_file
 
     newline = '\n'.encode()
 
