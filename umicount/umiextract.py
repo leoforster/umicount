@@ -28,8 +28,7 @@ def get_fastq_str(swq):
     return fastq_str
 
 def process_entry(entry, pattern, umi_len, only_umi,
-                  search_region, min_remaining_seqlen,
-                  anchor_seq, trailing_seq, 
+                  search_region, anchor_seq, trailing_seq, 
                   fuzzy_umi_params):
 
     seq_str = entry.seq.decode("utf-8")
@@ -43,37 +42,38 @@ def process_entry(entry, pattern, umi_len, only_umi,
         else:
             seq_str = seq_str[:search_region + pattern_len] # trim to search_region
 
-    match = pattern.search(seq_str)
+    match = pattern.search(seq_str) # exact matching using re
     if not match:
-        return (None, None) if only_umi else (entry, None)
+        if fuzzy_umi_params:
+            match = fuzzy_umi_params['fuzzy_pattern'].search(seq_str) # fuzzy matching
 
-    m_start, m_end = match.span()
-    if len(seq_str) - (m_start + pattern_len) <= max(min_remaining_seqlen, 0):
-        return (None, None) # skip reads where trimming leaves bp < threshold
+            if match:
+                _, m_end = match.span()
+                trailing_seq_hit = seq_str[m_end:m_end+len(trailing_seq)]
 
-    if fuzzy_umi_params:
-        anchor_max_mismatch = fuzzy_umi_params['anchor_max_mismatch']
-        anchor_max_indel = fuzzy_umi_params['anchor_max_indel']
-        min_trailing_G = fuzzy_umi_params['min_trailing_G']
+                # count mismatches, insertions, deletions
+                cmis, cins, cdel = match.fuzzy_counts
 
-        trailing_seq_hit = seq_str[m_end:m_end+len(trailing_seq)]
-
-        # count mismatches, insertions, deletions
-        cmis, cins, cdel = match.fuzzy_counts
-
-        # check against mismatch, indel, and G-count thresholds
-        if cmis <= anchor_max_mismatch \
-            and (cins + cdel) <= anchor_max_indel \
-            and trailing_seq_hit.count('G') >= min_trailing_G:
-            umi = match.group(2)
+                # check against mismatch, indel, and G-count thresholds
+                if cmis <= fuzzy_umi_params['anchor_max_mismatch'] \
+                    and (cins + cdel) <= fuzzy_umi_params['anchor_max_indel'] \
+                    and trailing_seq_hit.count('G') >= fuzzy_umi_params['min_trailing_G']:
+                    umi = match.group(2)
+                else:
+                    umi = None
+            else:
+                umi = None
         else:
-            return (None, None) if only_umi else (entry, None)
+            umi = None
     else:
         umi = match.group(0)[len(anchor_seq):len(anchor_seq) + umi_len]
 
-    entry_processed = slice_SequenceWithQualities(entry, m_end)
-    entry_processed.name += '_' + umi
-    return entry_processed, umi
+    if umi:
+        entry_processed = slice_SequenceWithQualities(entry, match.span()[1])
+        entry_processed.name += '_' + umi
+        return entry_processed, umi
+    else:
+        return (None, None) if only_umi else (entry, None)
 
 def none_gen():
     while True:
@@ -84,14 +84,13 @@ def precompile_regex(umi_len, anchor_seq, trailing_seq, fuzzy_umi_params):
         import regex
         anchor_max_mismatch = fuzzy_umi_params['anchor_max_mismatch']
         anchor_max_indel = fuzzy_umi_params['anchor_max_indel']
-        min_trailing_G = fuzzy_umi_params['min_trailing_G']
 
         anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_max_mismatch + anchor_max_indel}}}"
         umi_capture = rf"([ACGTN]{{{umi_len}}})"
-        pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
-    else:
-        pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
-
+        fuzzy_pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
+        fuzzy_umi_params['fuzzy_pattern'] = fuzzy_pattern
+    
+    pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
     return pattern
 
 def process_fastq(paths, outnames, umi_len, 
@@ -118,6 +117,7 @@ def process_fastq(paths, outnames, umi_len,
             sys.exit()
 
     pattern = precompile_regex(umi_len, anchor_seq, trailing_seq, fuzzy_umi_params)
+    print(fuzzy_umi_params)
 
     # prepare output files
     r1_out = gzip.open(r1_out_path, 'wb')
@@ -143,12 +143,11 @@ def process_fastq(paths, outnames, umi_len,
 
             # process R1 to search for UMI and trim
             entry1_processed, umi = process_entry(entry1, pattern, umi_len, only_umi,
-                                                  search_region, min_remaining_seqlen,
-                                                  anchor_seq, trailing_seq,
+                                                  search_region, anchor_seq, trailing_seq,
                                                   fuzzy_umi_params)
             
             # failure condition when sequence short or UMI not detected
-            if entry1_processed is None: 
+            if entry1_processed is None or len(entry1_processed.seq) <= max(min_remaining_seqlen, 0):
                 continue
 
             if umi:
