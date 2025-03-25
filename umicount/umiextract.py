@@ -117,7 +117,6 @@ def process_fastq(paths, outnames, umi_len,
             sys.exit()
 
     pattern = precompile_regex(umi_len, anchor_seq, trailing_seq, fuzzy_umi_params)
-    print(fuzzy_umi_params)
 
     # prepare output files
     r1_out = gzip.open(r1_out_path, 'wb')
