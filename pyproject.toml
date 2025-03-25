@@ -6,9 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "umicount"
 version = "0.1.0"
 description = "UMI counting tool for SmartSeq3 libraries"
-authors = ["Leo Förster <leoforster@gmail.com>"]
+authors = [{name="Leo Förster", email="leoforster@gmail.com"}]
 keywords = ["biology", "bioinformatics", "single cell", "transcriptomics", "smartseq3"]
-maintainers = ["Leo Förster <leoforster@gmail.com>", "Jooa Hooli <code@jooa.xyz>"]
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies = [
