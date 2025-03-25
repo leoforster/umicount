@@ -80,8 +80,8 @@ def none_gen():
         yield None
 
 def precompile_regex(umi_len, anchor_seq, trailing_seq, fuzzy_umi_params):
-
     if fuzzy_umi_params:
+        import regex
         anchor_max_mismatch = fuzzy_umi_params['anchor_max_mismatch']
         anchor_max_indel = fuzzy_umi_params['anchor_max_indel']
         min_trailing_G = fuzzy_umi_params['min_trailing_G']
