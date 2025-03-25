@@ -41,7 +41,6 @@ def process_entry(entry, pattern, umi_len, only_umi,
             seq_str = seq_str[:search_region + pattern_len] # trim to search_region
 
     match = pattern.search(seq_str)
-    print(match)
     if not match:
         return (None, None) if only_umi else (entry, None)
 
@@ -150,7 +149,6 @@ def process_fastq(paths, outnames, umi_len,
                 if entry1.name != entry2.name:
                     print('readname mismatch in R1 and R2 at read number %s' %readcount)
                     sys.exit()
-
                 if umi:
                     entry2.name += '_' + umi
 
