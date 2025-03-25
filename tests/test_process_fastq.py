@@ -44,7 +44,7 @@ def test_process_fastq_basic():
         write_fastq(r2_path, r2_reads)
 
         process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), 
-                      umi_len=4, only_umi=False, fuzzy_umi_extraction=False)
+                      umi_len=4, only_umi=False, fuzzy_umi_params=None)
 
         # Read the output
         with htseq.FastqReader(r1_out_path) as f:
@@ -69,7 +69,7 @@ def test_process_fastq_umi_len():
         write_fastq(r1_path, r1_reads)
 
         process_fastq((r1_path, None), (r1_out_path, None), 
-                      umi_len=6, only_umi=False, fuzzy_umi_extraction=False)
+                      umi_len=6, only_umi=False, fuzzy_umi_params=None)
 
         with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
@@ -90,7 +90,7 @@ def test_process_fastq_empty_input():
         write_fastq(r2_path, [])
 
         process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), 
-                      umi_len=4, only_umi=False, fuzzy_umi_extraction=False)
+                      umi_len=4, only_umi=False, fuzzy_umi_params=None)
 
         with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
@@ -112,7 +112,7 @@ def test_process_fastq_malformed_fastq():
 
         with pytest.raises(ValueError):  # parser raises error
             process_fastq((r1_path, None), (r1_out_path, None), 
-                          umi_len=4, only_umi=False, fuzzy_umi_extraction=False)
+                          umi_len=4, only_umi=False, fuzzy_umi_params=None)
 
 def test_process_fastq_no_matching_umi():
     """Test processing when no UMI pattern is found."""
@@ -128,7 +128,7 @@ def test_process_fastq_no_matching_umi():
         write_fastq(r1_path, r1_reads)
 
         process_fastq((r1_path, None), (r1_out_path, None), 
-                      umi_len=4, only_umi=True, fuzzy_umi_extraction=False)
+                      umi_len=4, only_umi=True, fuzzy_umi_params=None)
 
         with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]
@@ -150,7 +150,7 @@ def test_process_fastq_duplicate_read_name():
 
         with pytest.raises(SystemExit):  # Should exit due to duplicate read name
             process_fastq((r1_path, None), (r1_out_path, None), 
-                          umi_len=4, only_umi=False, fuzzy_umi_extraction=False)
+                          umi_len=4, only_umi=False, fuzzy_umi_params=None)
 
 def test_process_fastq_mismatched_read_names():
     """Test that mismatched R1 and R2 readnames raise an error."""
@@ -174,7 +174,7 @@ def test_process_fastq_mismatched_read_names():
 
         with pytest.raises(SystemExit):  # Should exit due to mismatched read names
             process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), 
-                          umi_len=4, only_umi=False, fuzzy_umi_extraction=False)
+                          umi_len=4, only_umi=False, fuzzy_umi_params=None)
 
 def test_process_fastq_empty_sequences():
     """Test that empty sequences are properly removed."""
@@ -197,7 +197,7 @@ def test_process_fastq_empty_sequences():
         write_fastq(r2_path, r2_reads)
 
         process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), 
-                      umi_len=4, only_umi=False, fuzzy_umi_extraction=False)
+                      umi_len=4, only_umi=False, fuzzy_umi_params=None)
 
         with htseq.FastqReader(r1_out_path) as f:
             out_reads = [entry for entry in f]

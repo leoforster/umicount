@@ -39,17 +39,17 @@ def umiextract():
     parser.add_argument("--trailing_Gs", action="store", type=int, default=2, 
                         help="Minimum number of Gs required in trailing sequence")
 
-    results = parser.parse_args()
+    r = parser.parse_args()
 
-    process_fastq((results.read1, results.read2),
-                  (results.r1_out, results.r2_out),
-                  results.umilen, results.only_umi,
-                  anchor_seq=results.anchor, trailing_seq=results.trailing,
-                  search_region=results.search_region, min_remaining_seqlen=results.min_seqlen,
-                  fuzzy_umi_extraction=results.fuzzy_umi, 
-                  anchor_max_mismatch=results.anchor_mismatches,
-                  anchor_max_indel=results.anchor_indels,
-                  min_trailing_G=results.trailing_Gs)
+    process_fastq((r.read1, r.read2),
+                  (r.r1_out, r.r2_out),
+                  r.umilen, r.only_umi,
+                  anchor_seq=r.anchor, trailing_seq=r.trailing,
+                  search_region=r.search_region, min_remaining_seqlen=r.min_seqlen,
+                  fuzzy_umi_params={'anchor_max_mismatch':r.anchor_mismatches,
+                                    'anchor_max_indel':r.anchor_indels,
+                                    'min_trailing_G':r.trailing_Gs} if r.fuzzy_umi else None
+                 )
 
 def umicount():
     parser = argparse.ArgumentParser(description="")
@@ -73,47 +73,47 @@ def umicount():
     parser.add_argument("--cores", action="store", type=int, default=22,
                         help="number of cores for multiprocessing")
     
-    results = parser.parse_args()
+    r = parser.parse_args()
 
-    if results.columns:
-        assert len(results.columns) == len(results.files), \
+    if r.columns:
+        assert len(r.columns) == len(r.files), \
                "column names and file names have different lengths"
-        colnames = results.columns
+        colnames = r.columns
     else:
-        colnames = list(map(os.path.basename, results.files))
+        colnames = list(map(os.path.basename, r.files))
 
-    if results.gtf:
-        if results.skipgtf:
+    if r.gtf:
+        if r.skipgtf:
             print('--gtf and --skipgtf given, will read from skipgtf')
-        elif not os.path.exists(results.gtf):
+        elif not os.path.exists(r.gtf):
             print('invalid GTF file path, exiting')
             sys.exit()
 
-    if results.skipgtf:
-        if not os.path.exists(results.skipgtf):
+    if r.skipgtf:
+        if not os.path.exists(r.skipgtf):
             print('invalid --skipgtf file path, exiting')
             sys.exit()
 
-    if [results.gtf, results.skipgtf] == [None, None]:
+    if [r.gtf, r.skipgtf] == [None, None]:
         print('require one of --gtf, --skipgtf')
         sys.exit()
 
-    if results.cores < 1:
+    if r.cores < 1:
         print('invalid number of cores, exiting')
         sys.exit()
 
-    if not results.outgeneformat in ['geneid', 'genename']:
+    if not r.outgeneformat in ['geneid', 'genename']:
         print("invalid --outgeneformat, use one of 'geneid' or 'genename'")
         sys.exit()
 
-    if len(results.files) == 0 and not results.gtf:
+    if len(r.files) == 0 and not r.gtf:
         print('no input files found, skipping input only valid with --gtf')
         sys.exit()
-    for i in results.files:
+    for i in r.files:
         if not os.path.exists(i):
             print('file %s not found, exiting' %i)
             sys.exit()
 
-    process_bam(results.files, results.gtf, results.output, results.cores,
-                results.dumpgtf, results.skipgtf, results.nodupes, colnames,
-                results.outgeneformat)
+    process_bam(r.files, r.gtf, r.output, r.cores,
+                r.dumpgtf, r.skipgtf, r.nodupes, colnames,
+                r.outgeneformat)
