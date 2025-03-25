@@ -29,8 +29,7 @@ def test_process_entry_default_matching():
     entry_names = []
     for r in r1_reads:
         entry = htseq.SequenceWithQualities(r[1].encode(), r[0], r[2].encode())
-        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False,
-                                             search_region=-1, min_remaining_seqlen=-1,
+        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False,search_region=-1, 
                                              anchor_seq=anchor_seq, trailing_seq=trailing_seq,
                                              fuzzy_umi_params=None)
         entry_names.append(entry_processed)
@@ -57,17 +56,18 @@ def test_process_entry_fuzzy_matching_basic():
 
     anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_max_mismatch + anchor_max_indel}}}"
     umi_capture = rf"([ACGTN]{{{umi_len}}})"
-    pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
+    fuzzy_pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
+    pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
 
     entry_names = []
     for r in r1_reads:
         entry = htseq.SequenceWithQualities(r[1].encode(), r[0], r[2].encode())
-        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False,
-                                             search_region=-1, min_remaining_seqlen=-1,
+        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False, search_region=-1,
                                              anchor_seq=anchor_seq, trailing_seq=trailing_seq,
                                              fuzzy_umi_params={'anchor_max_mismatch':anchor_max_mismatch,
                                                                'anchor_max_indel':anchor_max_indel,
-                                                               'min_trailing_G':min_trailing_G})
+                                                               'min_trailing_G':min_trailing_G,
+                                                               'fuzzy_pattern':fuzzy_pattern})
         entry_names.append(entry_processed)
 
     assert entry_names[0].name == "seq1_ACGT"
@@ -98,17 +98,18 @@ def test_process_entry_fuzzy_matching():
 
     anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_max_mismatch + anchor_max_indel}}}"
     umi_capture = rf"([ACGTN]{{{umi_len}}})"
-    pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
+    fuzzy_pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
+    pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
 
     entry_names = []
     for r in r1_reads:
         entry = htseq.SequenceWithQualities(r[1].encode(), r[0], ('I'*len(r[1])).encode())
-        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False,
-                                             search_region=-1, min_remaining_seqlen=-1,
+        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False, search_region=-1,
                                              anchor_seq=anchor_seq, trailing_seq=trailing_seq,
                                              fuzzy_umi_params={'anchor_max_mismatch':anchor_max_mismatch,
                                                                'anchor_max_indel':anchor_max_indel,
-                                                               'min_trailing_G':min_trailing_G})
+                                                               'min_trailing_G':min_trailing_G,
+                                                               'fuzzy_pattern':fuzzy_pattern})
         entry_names.append(entry_processed)
 
     assert entry_names[0].name == "seq1_ACGT"
@@ -145,17 +146,18 @@ def test_process_entry_fuzzy_matching_onlyumi():
 
     anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_max_mismatch + anchor_max_indel}}}"
     umi_capture = rf"([ACGTN]{{{umi_len}}})"
-    pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
+    fuzzy_pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
+    pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
 
     entry_names = []
     for r in r1_reads:
         entry = htseq.SequenceWithQualities(r[1].encode(), r[0], ('I'*len(r[1])).encode())
-        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=True,
-                                             search_region=-1, min_remaining_seqlen=-1,
+        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=True, search_region=-1,
                                              anchor_seq=anchor_seq, trailing_seq=trailing_seq,
                                              fuzzy_umi_params={'anchor_max_mismatch':anchor_max_mismatch,
                                                                'anchor_max_indel':anchor_max_indel,
-                                                               'min_trailing_G':min_trailing_G})
+                                                               'min_trailing_G':min_trailing_G,
+                                                               'fuzzy_pattern':fuzzy_pattern})
         entry_names.append(entry_processed)
 
     assert entry_names[0].name == "seq1_ACGT"
@@ -186,34 +188,7 @@ def test_process_entry_searchregion_length():
     with pytest.raises(SystemExit):
         for r in r1_reads:
             entry = htseq.SequenceWithQualities(r[1].encode(), r[0], ('I'*len(r[1])).encode())
-            entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False,
-                                                 search_region=search_region, min_remaining_seqlen=-1,
+            entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False, search_region=search_region,
                                                  anchor_seq=anchor_seq, trailing_seq=trailing_seq,
                                                  fuzzy_umi_params=None)
 
-def test_process_entry_minremainingseqlen_length():
-    """Test that min_remaining_seqlen excludes shorter reads"""
-    r1_reads = [
-        ("seq1", "ATTGCGCAATGACGTGGGACGTC"), # 5 remaining seqlen
-        ("seq2", "ATTGCGCAATGACGTGGGACGTCACGTC"), # 10 remaining seqlen
-    ]
-
-    min_remaining_seqlen = 5
-
-    umi_len = 4
-    anchor_seq = 'ATTGCGCAATG'
-    trailing_seq = 'GGG'
-
-    pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
-
-    entry_names = []
-    for r in r1_reads:
-        entry = htseq.SequenceWithQualities(r[1].encode(), r[0], ('I'*len(r[1])).encode())
-        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False,
-                                             search_region=-1, min_remaining_seqlen=min_remaining_seqlen,
-                                             anchor_seq=anchor_seq, trailing_seq=trailing_seq,
-                                             fuzzy_umi_params=None)
-        entry_names.append(entry_processed)
-
-    assert entry_names[0] is None
-    assert entry_names[1].name == "seq2_ACGT"

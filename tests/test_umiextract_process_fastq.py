@@ -201,3 +201,24 @@ def test_process_fastq_empty_sequences():
 
         assert len(out_reads) == 0  # Both sequences should be removed
 
+def test_process_entry_minremainingseqlen_length():
+    """Test that min_remaining_seqlen excludes shorter reads"""
+    r1_reads = [
+        ("seq1", "ATTGCGCAATGACGTGGGACGTC", "IIIIIIIIIIIIIIIIIIIIIII"), # 5 remaining seqlen
+        ("seq2", "ATTGCGCAATGACGTGGGACGTCACGTC", "IIIIIIIIIIIIIIIIIIIIIIIIIIII"), # 10 remaining seqlen
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        r1_path = os.path.join(tmpdir, "r1.fastq.gz")
+        r1_out_path = os.path.join(tmpdir, "r1_out.fastq.gz")
+
+        write_fastq(r1_path, r1_reads)
+
+        process_fastq((r1_path, None), (r1_out_path, None), 
+                      umi_len=4, only_umi=False, min_remaining_seqlen=5,
+                      fuzzy_umi_params=None)
+
+        with htseq.FastqReader(r1_out_path) as f:
+            out_reads = [entry for entry in f]
+
+        assert len(out_reads) == 1  # only 1 read passes
