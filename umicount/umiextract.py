@@ -37,8 +37,9 @@ def process_entry(entry, pattern, umi_len, only_umi,
 
     if search_region > 0:
         if search_region + pattern_len > len(seq_str):
-            print( ('read length not compatible with search_region '
-                    'of %s and %sbp pattern' %(search_region, pattern_len)) )
+            print( ('read length of %sbp not compatible with search_region '
+                    'of %s and %sbp pattern' %(len(seq_str), search_region, pattern_len)) )
+            sys.exit()
         else:
             seq_str = seq_str[:search_region + pattern_len] # trim to search_region
 
@@ -51,6 +52,10 @@ def process_entry(entry, pattern, umi_len, only_umi,
         return (None, None) # skip reads where trimming leaves bp < threshold
 
     if fuzzy_umi_params:
+        anchor_max_mismatch = fuzzy_umi_params['anchor_max_mismatch']
+        anchor_max_indel = fuzzy_umi_params['anchor_max_indel']
+        min_trailing_G = fuzzy_umi_params['min_trailing_G']
+
         trailing_seq_hit = seq_str[m_end:m_end+len(trailing_seq)]
 
         # count mismatches, insertions, deletions
@@ -61,6 +66,8 @@ def process_entry(entry, pattern, umi_len, only_umi,
             and (cins + cdel) <= anchor_max_indel \
             and trailing_seq_hit.count('G') >= min_trailing_G:
             umi = match.group(2)
+        else:
+            return (None, None) if only_umi else (entry, None)
     else:
         umi = match.group(0)[len(anchor_seq):len(anchor_seq) + umi_len]
 
@@ -71,6 +78,21 @@ def process_entry(entry, pattern, umi_len, only_umi,
 def none_gen():
     while True:
         yield None
+
+def precompile_regex(umi_len, anchor_seq, trailing_seq, fuzzy_umi_params):
+
+    if fuzzy_umi_params:
+        anchor_max_mismatch = fuzzy_umi_params['anchor_max_mismatch']
+        anchor_max_indel = fuzzy_umi_params['anchor_max_indel']
+        min_trailing_G = fuzzy_umi_params['min_trailing_G']
+
+        anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_max_mismatch + anchor_max_indel}}}"
+        umi_capture = rf"([ACGTN]{{{umi_len}}})"
+        pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
+    else:
+        pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
+
+    return pattern
 
 def process_fastq(paths, outnames, umi_len, 
                   only_umi=False, 
@@ -95,19 +117,7 @@ def process_fastq(paths, outnames, umi_len,
             print('requires regex package to enable fuzzy_umi_extraction')
             sys.exit()
 
-        anchor_max_mismatch = fuzzy_umi_params['anchor_max_mismatch']
-        anchor_max_indel = fuzzy_umi_params['anchor_max_indel']
-        min_trailing_G = fuzzy_umi_params['min_trailing_G']
-        anchor_edits = anchor_max_mismatch + anchor_max_indel
-
-    # precompile regex
-    if fuzzy_umi_params:
-        anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_edits}}}"
-        umi_capture = rf"([ACGTN]{{{umi_len}}})"
-        pattern_str = anchor_fuzzy + umi_capture
-        pattern = regex.compile(pattern_str, flags=regex.BESTMATCH)
-    else:
-        pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
+    pattern = precompile_regex(umi_len, anchor_seq, trailing_seq, fuzzy_umi_params)
 
     # prepare output files
     r1_out = gzip.open(r1_out_path, 'wb')
@@ -136,7 +146,8 @@ def process_fastq(paths, outnames, umi_len,
                                                   anchor_seq, trailing_seq,
                                                   fuzzy_umi_params)
             
-            if entry1_processed is None: # case when entire read is UMI + flanking
+            # failure condition when sequence short or UMI not detected
+            if entry1_processed is None: 
                 continue
 
             if umi:
