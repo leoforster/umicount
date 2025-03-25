@@ -132,6 +132,7 @@ def process_fastq(paths, outnames, umi_len,
 
         for entry1, entry2 in zip(r1_in, r2_in):
             readcount += 1
+            entry1.name, _, _ = entry1.name.partition(' ')
 
             # check for duplicated R1 readname, R2 is checked for consistency below
             if entry1.name in readnames:
@@ -155,6 +156,7 @@ def process_fastq(paths, outnames, umi_len,
 
             # handle R2 readname: check it matches R1, also add umi
             if entry2 is not None:
+                entry2.name, _, _ = entry2.name.partition(' ')
                 if entry1.name != entry2.name:
                     print('readname mismatch in R1 and R2 at read number %s' %readcount)
                     sys.exit()
