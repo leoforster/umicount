@@ -197,27 +197,23 @@ def parse_bam_and_count(bamfile, gtf_data):
         gcounts[gene]['D'] = sum(umi_dict.values()) - (gcounts[gene]['UI'] + gcounts[gene]['UE'])
     return gcounts
 
-def write_counts(outfile, bamfile, results, gene_counts, gattributes,
-                 outgeneformat, cols_to_use):
+def write_counts(outfile, bamfile, results, gene_counts, gattributes, cols_to_use):
     with open(outfile, 'w') as out:
         header_fields = [os.path.basename(bamfile)]
         for b in cols_to_use:
             header_fields.append(b)
         out.write('\t'.join(header_fields) + '\n')
         for gene, counts in gene_counts.items():
-            gene_label = (gene if gene.startswith('_') else
-                          (gene if outgeneformat == 'geneid' else gattributes.get(gene, [''])[0]))
-            line_fields = [gene_label]
+            line_fields = [gene]
             for i in range(len(bamfile)):
                 for b in cols_to_use:
                     line_fields.append(str(results[i][gene][b]))
             out.write('\t'.join(line_fields) + '\n')
 
-def process_bam(bamfile, gtffile, outfile, outgeneformat='geneid',
+def process_bam(bamfile, gtffile, outfile, 
                 dumpgtf=None, skipgtf=None, skipdup=False):
     # Load or parse the GTF data
     gtf_data = load_gtf_data(gtffile, skipgtf, dumpgtf, BASECOLS)
-    # Unpack gcounts (used for header/reference) from the GTF data
     gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
 
     results = [parse_bam_and_count(bamfile, gtf_data)]
@@ -226,5 +222,4 @@ def process_bam(bamfile, gtffile, outfile, outgeneformat='geneid',
     if skipdup:
         cols_to_use = [col for col in cols_to_use if col != 'D']
 
-    write_counts(outfile, bamfile, results, gcounts, gattributes, 
-                 outgeneformat, cols_to_use)
+    write_counts(outfile, bamfile, results, gcounts, gattributes, cols_to_use)

@@ -52,68 +52,32 @@ def umiextract():
                  )
 
 def umicount():
+
+    def existing_path(path):
+        if not os.path.exists(path):
+            raise argparse.ArgumentTypeError(f"Path '{path}' does not exist.")
+        return path
+
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument("-f", "--files", action="store", default=[], nargs="*",
+    parser.add_argument("-f", "--files", type=existing_path, default=[], nargs="*",
                         help="input bamfiles from modified fastqs, sorted by read")
-    parser.add_argument("-c", "--columns", action="store", default=None,
-                        nargs="*", help="output column basenames")
-    parser.add_argument("--dumpgtf", action="store",
-                        default="umicounts_gtf.dump",
-                        help="dump GTF parsing output to given file")
-    parser.add_argument("--skipgtf", action="store",
-                        help="skip GTF parsing and read input from file")
-    parser.add_argument("-g", "--gtf", action="store",
-                        help="input GTF file (ensembl format)")
+    parser.add_argument("-g", "--gtf", type=existing_path, help="input GTF file (ensembl format)")
+    parser.add_argument("--GTF-dump", type=existing_path, help="File path to dump parsed GTF data")
+    parser.add_argument("--GTF-skip-parse", type=existing_path, help="Path to dumped GTF data")
     parser.add_argument("-d", "--nodupes", action="store_true", default=False,
                         help="dont report UMI duplicates per gene per cell")
-    parser.add_argument("-o", "--output", action="store", required=True,
+    parser.add_argument("-o", "--output", type=existing_path, required=True,
                         help="output counts matrix")
-    parser.add_argument("--outgeneformat", action="store", default="geneid",
-                        help="output counts matrix with 'geneid' or 'genename'")
-    parser.add_argument("--cores", action="store", type=int, default=22,
-                        help="number of cores for multiprocessing")
     
     r = parser.parse_args()
 
-    if r.columns:
-        assert len(r.columns) == len(r.files), \
-               "column names and file names have different lengths"
-        colnames = r.columns
-    else:
-        colnames = list(map(os.path.basename, r.files))
-
-    if r.gtf:
-        if r.skipgtf:
-            print('--gtf and --skipgtf given, will read from skipgtf')
-        elif not os.path.exists(r.gtf):
-            print('invalid GTF file path, exiting')
-            sys.exit()
-
-    if r.skipgtf:
-        if not os.path.exists(r.skipgtf):
-            print('invalid --skipgtf file path, exiting')
-            sys.exit()
-
-    if [r.gtf, r.skipgtf] == [None, None]:
-        print('require one of --gtf, --skipgtf')
-        sys.exit()
-
-    if r.cores < 1:
-        print('invalid number of cores, exiting')
-        sys.exit()
-
-    if not r.outgeneformat in ['geneid', 'genename']:
-        print("invalid --outgeneformat, use one of 'geneid' or 'genename'")
+    if r.gtf is None and r.GTF_skip_parse is None:
+        print('require one of --gtf, --GTF-skip-parse')
         sys.exit()
 
     if len(r.files) == 0 and not r.gtf:
         print('no input files found, skipping input only valid with --gtf')
         sys.exit()
-    for i in r.files:
-        if not os.path.exists(i):
-            print('file %s not found, exiting' %i)
-            sys.exit()
 
-    process_bam(r.files, r.gtf, r.output, r.cores,
-                r.dumpgtf, r.skipgtf, r.nodupes, colnames,
-                r.outgeneformat)
+    process_bam(r.files, r.gtf, r.output,
+                r.dumpgtf, r.skipgtf, r.nodupes)
