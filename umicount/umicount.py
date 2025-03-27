@@ -30,7 +30,7 @@ def parse_gtf(gtffile, cols, exon_attr=['gene_id', 'gene_name', 'exon_number'], 
                 try:
                     feature_id = f.attr[id_attribute]
                 except KeyError:
-                    raise ValueError("Feature %s does not contain a '%s' attribute" %(f.name, id_attribute))
+                    raise ValueError("%s does not contain a '%s' attribute" %(f.name, id_attribute))
 
                 efeatures[f.iv] += feature_id
                 eattributes[f.attr[id_attribute]] = [f.attr[attr] if attr in f.attr else
@@ -41,13 +41,13 @@ def parse_gtf(gtffile, cols, exon_attr=['gene_id', 'gene_name', 'exon_number'], 
                 try:
                     feature_id = f.attr[id_attribute]
                 except KeyError:
-                    raise ValueError("Feature %s does not contain a '%s' attribute" %(f.name, id_attribute))
+                    raise ValueError("%s does not contain a '%s' attribute" %(f.name, id_attribute))
 
+                # store raw/umi for gene counts, intron, and exon
                 gfeatures[f.iv] += feature_id
-                gcounts[f.attr[id_attribute]] = default.copy() # store raw/umi for gene counts, intron, and exon
+                gcounts[f.attr[id_attribute]] = default.copy() 
                 gattributes[f.attr[id_attribute]] = [f.attr[attr] if attr in f.attr else
                                                      '' for attr in additional_attributes[f.type]]
-
     except:
         sys.stderr.write(
             "Error occured when processing GFF file (%s):\n" %
