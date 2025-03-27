@@ -39,15 +39,9 @@ def dummy_pair_SAM_alignments_factory(bundles):
 def get_dummy_gtf_dump(genes_intervals):
     """
     Build a dummy GTF dump to be used by parse_bam_and_count.
-    
     genes_intervals is a list of tuples:
        (gene_id, gene_name, exon_id, interval, include_exon)
-       
-    For each gene:
-      - A default count dictionary is added.
-      - gfeatures gets an entry for gene_id.
-      - If include_exon is True, then efeatures gets an entry for exon_id.
-      - gattributes and eattributes are set accordingly.
+
     """
     default = {col: 0 for col in BASECOLS}
     gcounts = {"_unmapped": default.copy(),
@@ -110,6 +104,21 @@ def test_parse_gtf(tmp_path):
         if "gene1" in val:
             found_gene = True
     assert found_gene
+
+def test_parse_malformed_gtf(tmp_path):
+    """
+    Test the HTSeq GTF parsing function on a malformed GTF.
+    """
+    gtf_content = (
+        'chr1\tsourcegene\t100\t200\t.\t+\t.\tgene_id "gene1"; gene_name "GeneName";\n'
+        'chr1\tsource\texon\t100\t200\t.\n+\t+\t.\texon_id "exon1";\n'
+    )
+    gtf_file = tmp_path / "test.gtf"
+    gtf_file.write_text(gtf_content)
+    
+    # Call parse_gtf with BASECOLS from the main script
+    with pytest.raises(ValueError):
+        result = parse_gtf(str(gtf_file), BASECOLS)
 
 def test_extract_first_alignment():
     """
