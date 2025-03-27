@@ -5,7 +5,7 @@ import sys
 import os
 
 from .umiextract import process_fastq
-from .umicount import process_bam
+from .umicount import process_bam, load_gtf_data
 
 def umiextract():
     parser = argparse.ArgumentParser(description="")
@@ -85,7 +85,9 @@ def umicount():
 
     if r.gtf and r.GTF_dump:
         load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump)
-        process_bam(r.files[0], r.gtf, r.output, 
-                    skipgtf=r.GTF_dump, skipdup=r.nodupes)
+        if len(r.files) > 0 and r.output:
+            print('counting UMIs in %s' %r.files[0])
+            process_bam(r.files[0], r.gtf, r.output, 
+                        skipgtf=r.GTF_dump, skipdup=r.nodupes)
     else:
         process_bam(r.files[0], r.gtf, r.output, r.GTF_skip_parse, r.nodupes)

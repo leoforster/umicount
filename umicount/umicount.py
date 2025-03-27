@@ -205,9 +205,8 @@ def write_counts(outfile, bamfile, results, gene_counts, gattributes, cols_to_us
         out.write('\t'.join(header_fields) + '\n')
         for gene, counts in gene_counts.items():
             line_fields = [gene]
-            for i in range(len(bamfile)):
-                for b in cols_to_use:
-                    line_fields.append(str(results[i][gene][b]))
+            for b in cols_to_use:
+                line_fields.append(str(results[gene][b]))
             out.write('\t'.join(line_fields) + '\n')
 
 def process_bam(bamfile, gtffile, outfile, 
@@ -216,7 +215,7 @@ def process_bam(bamfile, gtffile, outfile,
     gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None, cols=BASECOLS)
     gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
 
-    results = [parse_bam_and_count(bamfile, gtf_data)]
+    results = parse_bam_and_count(bamfile, gtf_data)
 
     cols_to_use = BASECOLS.copy()
     if skipdup:
