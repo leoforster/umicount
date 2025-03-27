@@ -316,12 +316,7 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
         ("gene1", "GeneName1", "exon1", ivexon1, True), # exon1 definition for gene1
         ("gene1", "GeneName1", "exon2", ivexon2, True), # exon2 definition for gene1
     ]
-
-    gtf_dump = get_dummy_gtf_dump(genes_intervals)
-    dump_file = tmp_path / "dummy_gtf_dump.pkl"
-    with open(str(dump_file), "wb") as f:
-        pickle.dump(gtf_dump, f)
-    skipgtf = str(dump_file)
+    gtf_data = get_dummy_gtf_dump(genes_intervals)
     
     # Create bundles.
     # Bundle 1: paired read with UMI "UMI1" overlapping gene1
@@ -354,7 +349,7 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts = parse_bam_and_count("dummy.bam", skipgtf)
+    counts = parse_bam_and_count("dummy.bam", gtf_data)
     
     gene1_counts = counts["gene1"]
     assert gene1_counts["UE"] == 1 # from bundle1
@@ -383,11 +378,7 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
         ("gene1", "GeneName1", "exon2", ivgene1exon2, True), # define gene1 exon2, leaving some intron
         ("gene2", "GeneName2", "exon1", ivgene2, False), # gene2 without exon, ie assume intron
     ]
-    gtf_dump = get_dummy_gtf_dump(genes_intervals)
-    dump_file = tmp_path / "dummy_gtf_dump_complex.pkl"
-    with open(str(dump_file), "wb") as f:
-        pickle.dump(gtf_dump, f)
-    skipgtf = str(dump_file)
+    gtf_data = get_dummy_gtf_dump(genes_intervals)
     
     # Create bundles.
     # Bundle 1: proper paired read with UMI "UMI1" overlapping gene1
@@ -416,7 +407,7 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts = parse_bam_and_count("dummy.bam", skipgtf)
+    counts = parse_bam_and_count("dummy.bam", gtf_data)
     
     gene1_counts = counts["gene1"]
     gene2_counts = counts["gene2"]
@@ -438,11 +429,7 @@ def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
         ("gene1", "GeneName1", "exon1", ivgene1, True), # gene1 
         ("gene2", "GeneName2", "exon1", ivgene2, True), # gene2 
     ]
-    gtf_dump = get_dummy_gtf_dump(genes_intervals)
-    dump_file = tmp_path / "dummy_gtf_dump_complex.pkl"
-    with open(str(dump_file), "wb") as f:
-        pickle.dump(gtf_dump, f)
-    skipgtf = str(dump_file)
+    gtf_data = get_dummy_gtf_dump(genes_intervals)
     
     # Create bundles.
     # Bundle 1: proper paired read with UMI to gene1
@@ -466,7 +453,7 @@ def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts = parse_bam_and_count("dummy.bam", skipgtf)
+    counts = parse_bam_and_count("dummy.bam", gtf_data)
     
     gene1_counts = counts["gene1"]
     gene2_counts = counts["gene2"]
