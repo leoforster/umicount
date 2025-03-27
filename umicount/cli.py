@@ -53,21 +53,26 @@ def umiextract():
 
 def umicount():
 
-    def existing_path(path):
-        if not os.path.exists(path):
-            raise argparse.ArgumentTypeError(f"Path '{path}' does not exist.")
+    def existing_file(path):
+        if not os.path.isfile(path):
+            raise argparse.ArgumentTypeError(f"File '{path}' does not exist.")
+        return path
+
+    def existing_dir(path):
+        if not os.path.exists(path.dirname()):
+            raise argparse.ArgumentTypeError(f"Folder '{path}' does not exist.")
         return path
 
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument("-f", "--files", type=existing_path, default=[], nargs="*",
+    parser.add_argument("-f", "--files", type=existing_file, default=[], nargs="*",
                         help="input bamfiles from modified fastqs, sorted by read")
-    parser.add_argument("-g", "--gtf", type=existing_path, help="input GTF file (ensembl format)")
-    parser.add_argument("--GTF-dump", type=existing_path, help="File path to dump parsed GTF data")
-    parser.add_argument("--GTF-skip-parse", type=existing_path, help="Path to dumped GTF data")
+    parser.add_argument("-g", "--gtf", type=existing_file, help="input GTF file (ensembl format)")
+    parser.add_argument("--GTF-dump", type=existing_file, help="File path to dump parsed GTF data")
+    parser.add_argument("--GTF-skip-parse", type=existing_dir, help="Path to dumped GTF data")
     parser.add_argument("-d", "--nodupes", action="store_true", default=False,
                         help="dont report UMI duplicates per gene per cell")
-    parser.add_argument("-o", "--output", type=existing_path, required=True,
-                        help="output counts matrix")
+    parser.add_argument("-o", "--output", type=existing_dir, required=True, 
+                        help="Path to output counts matrix")
     
     r = parser.parse_args()
 
