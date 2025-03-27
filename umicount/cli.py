@@ -83,5 +83,9 @@ def umicount():
         print('no input files found, skipping input only valid with --gtf and --GTF-dump')
         sys.exit()
 
-    process_bam(r.files[0], r.gtf, r.output,
-                r.GTF_dump, r.GTF_skip_parse, r.nodupes)
+    if r.gtf and r.GTF_dump:
+        load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump)
+        process_bam(r.files[0], r.gtf, r.output, 
+                    skipgtf=r.GTF_dump, skipdup=r.nodupes)
+    else:
+        process_bam(r.files[0], r.gtf, r.output, r.GTF_skip_parse, r.nodupes)

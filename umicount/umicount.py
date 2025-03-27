@@ -211,9 +211,9 @@ def write_counts(outfile, bamfile, results, gene_counts, gattributes, cols_to_us
             out.write('\t'.join(line_fields) + '\n')
 
 def process_bam(bamfile, gtffile, outfile, 
-                dumpgtf=None, skipgtf=None, skipdup=False):
+                skipgtf=None, skipdup=False):
     # Load or parse the GTF data
-    gtf_data = load_gtf_data(gtffile, skipgtf, dumpgtf, BASECOLS)
+    gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None, cols=BASECOLS)
     gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
 
     results = [parse_bam_and_count(bamfile, gtf_data)]
