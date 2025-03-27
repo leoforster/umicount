@@ -138,11 +138,66 @@ def test_extract_first_alignment():
     assert rt3.category == "_unmapped"
     assert rt3.read2_almnt is None
 
+def test_read_at_exon_boundary():
+    """
+    In HTSeq, reads exactly at the boundaries of an exon interval should be
+    considered overlapping the exon.
+    """
+    exon_iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
+    rt = create_readtrack("read_boundary_UMI", exon_iv)
+    
+    gfeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
+    efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
+    gfeatures[exon_iv] += "gene1"
+    efeatures[exon_iv] += "exon1"
+    dummy_eattributes = {"exon1": ["gene1", "GeneName1", "1"]}
+    
+    rt.find_overlap(gfeatures, efeatures)
+    rt.evaluate_overlap(dummy_eattributes)
+    assert rt.gene_to_count == "gene1"
+    assert rt.exon_to_count == "exon1"
+
+def test_read_wrong_strand():
+    """
+    A read on the wrong strand should not count as overlapping the feature.
+    """
+    # Create arrays with strandedness.
+    gfeatures = HTSeq.GenomicArrayOfSets("auto", stranded=True)
+    efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=True)
+    iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
+    gfeatures[iv] += "gene1"
+    efeatures[iv] += "exon1"
+    dummy_eattributes = {"exon1": ["gene1", "GeneName1", "1"]}
+    
+    # Create a read aligned on the minus strand.
+    aln = DummyAlignment("read_strand", True, HTSeq.GenomicInterval("chr1", 100, 200, "-"))
+    rt = ReadTrack(aln, aln)
+    rt.find_overlap(gfeatures, efeatures)
+    rt.evaluate_overlap(dummy_eattributes)
+    assert rt.category == "_no_feature"
+
+def test_umi_extraction_cases():
+    """
+    Test UMI extraction logic from read names.
+    """
+    test_cases = [
+        ("read1_UMI123", "UMI123"),
+        ("read1_lane3", "lane3"),       # underscore present, takes suffix
+        ("read1", None),                # no underscore
+        ("read1_", None),               # empty UMI
+        ("_UMI999", "UMI999"),          # leading underscore, still extracts
+    ]
+    
+    iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
+    for read_name, expected_umi in test_cases:
+        aln = DummyAlignment(read_name, True, iv)
+        rt = ReadTrack(aln, aln)
+        assert rt.umi == expected_umi
+
 def test_readtrack_can_do_overlap():
     """
     Test the can_do_overlap method.
     """
-
     # Create dummy alignments with both read1 and read2 present.
     iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
     rt = create_readtrack("readA_UMI", iv)
@@ -316,10 +371,6 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
 def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
     """
     Test parse_bam_and_count in a multi-gene scenario.
-      - Bundle 1: Proper paired read with UMI ("UMI1") overlapping gene1 (with exon).
-      - Bundle 2: Proper paired read with UMI ("UMI2") overlapping gene2 but without exon overlap (intron).
-      - Bundle 3: Ambiguous read (no UMI) overlapping an interval that hits both gene1 and gene2.
-      - Bundle 4: Duplicate of Bundle 1 (for gene1).
     """
     # Build a dummy GTF dump with two genes.
     ivgene1 = HTSeq.GenomicInterval("chr1", 100, 200, "+")
@@ -375,3 +426,51 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
 
     assert gene2_counts["UI"] == 1 # from bundle2 (gene is intronic)
     assert counts["_ambiguous"]["RE"] == 1 # from bundle3
+
+def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
+    """
+    Test UMI deduplication scenarios in parse_bam_and_count.
+    """
+    # Build a dummy GTF dump with two genes.
+    ivgene1 = HTSeq.GenomicInterval("chr1", 100, 200, "+")
+    ivgene2 = HTSeq.GenomicInterval("chr1", 250, 350, "+")
+    genes_intervals = [
+        ("gene1", "GeneName1", "exon1", ivgene1, True), # gene1 
+        ("gene2", "GeneName2", "exon1", ivgene2, True), # gene2 
+    ]
+    gtf_dump = get_dummy_gtf_dump(genes_intervals)
+    dump_file = tmp_path / "dummy_gtf_dump_complex.pkl"
+    with open(str(dump_file), "wb") as f:
+        pickle.dump(gtf_dump, f)
+    skipgtf = str(dump_file)
+    
+    # Create bundles.
+    # Bundle 1: proper paired read with UMI to gene1
+    bundle1 = [(DummyAlignment("read1_UMI1", True, ivgene1), 
+                DummyAlignment("read1_UMI1", True, ivgene1))]
+
+    # Bundle 2: proper paired read with same UMI as Bundle1, for gene2
+    bundle2 = [(DummyAlignment("read2_UMI1", True, ivgene2), 
+                DummyAlignment("read2_UMI1", True, ivgene2))]
+
+    # Bundle 3: proper paired read with same UMI as Bundle1, but different position
+    ivgene1_shift = HTSeq.GenomicInterval("chr1", 120, 220, "+")
+    bundle3 = [(DummyAlignment("read1_UMI1", True, ivgene1_shift), 
+                DummyAlignment("read1_UMI1", True, ivgene1_shift))]
+
+    # Bundle 4: proper paired read with same base name as Bundle1 but different UMI
+    bundle4 = [(DummyAlignment("read1_UMI2", True, ivgene1), 
+                DummyAlignment("read1_UMI2", True, ivgene1))]
+    
+    bundles = [bundle1, bundle2, bundle3, bundle4]
+    monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
+    monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
+    
+    counts = parse_bam_and_count("dummy.bam", skipgtf)
+    
+    gene1_counts = counts["gene1"]
+    gene2_counts = counts["gene2"]
+    
+    assert gene1_counts["UE"] == 2 # from bundle1, bundle4
+    assert gene2_counts["UE"] == 1 # from bundle2
+    assert gene1_counts["D"] == 1 # from bundle3

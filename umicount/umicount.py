@@ -77,8 +77,9 @@ class ReadTrack:
     exon_to_count: str = ""
 
     def __post_init__(self):
-        if len(self.read1_almnt.read.name.split('_')) > 1:
-            self.umi = self.read1_almnt.read.name.split('_')[-1]
+        parts = self.read1_almnt.read.name.rsplit('_', 1)
+        if len(parts) == 2 and parts[1]:
+            self.umi = parts[1]
         else:
             self.umi = None
 
