@@ -71,8 +71,7 @@ def umicount():
     parser.add_argument("--GTF-skip-parse", type=existing_file, help="Path to dumped GTF data")
     parser.add_argument("-d", "--nodupes", action="store_true", default=False,
                         help="dont report UMI duplicates per gene per cell")
-    parser.add_argument("-o", "--output", type=existing_dir, required=True, 
-                        help="Path to output counts matrix")
+    parser.add_argument("-o", "--output", type=existing_dir, help="Path to output counts matrix")
     
     r = parser.parse_args()
 
@@ -80,7 +79,7 @@ def umicount():
         print('require one of --gtf, --GTF-skip-parse')
         sys.exit()
 
-    if len(r.files) == 0 and not (r.gtf and r.GTF_dump):
+    if (len(r.files) == 0 or r.output is None) and not (r.gtf and r.GTF_dump):
         print('no input files found, skipping input only valid with --gtf and --GTF-dump')
         sys.exit()
 
