@@ -59,7 +59,7 @@ def umicount():
         return path
 
     def existing_dir(path):
-        if not os.path.exists(path.dirname()):
+        if not os.path.exists(os.path.dirname(path)):
             raise argparse.ArgumentTypeError(f"Folder '{path}' does not exist.")
         return path
 
@@ -85,4 +85,4 @@ def umicount():
         sys.exit()
 
     process_bam(r.files, r.gtf, r.output,
-                r.dumpgtf, r.skipgtf, r.nodupes)
+                r.GTF_dump, r.GTF_skip_parse, r.nodupes)
