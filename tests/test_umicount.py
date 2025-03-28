@@ -84,8 +84,6 @@ def test_parse_gtf(tmp_path):
     )
     gtf_file = tmp_path / "test.gtf"
     gtf_file.write_text(gtf_content)
-    
-    # Call parse_gtf with BASECOLS from the main script
     result = parse_gtf(str(gtf_file), BASECOLS)
     gcounts, gfeatures, efeatures, gattributes, eattributes = result
 
@@ -96,9 +94,8 @@ def test_parse_gtf(tmp_path):
     for key in ["_unmapped", "_multimapping", "_no_feature", "_ambiguous", "_FAIL"]:
         assert key in gcounts
 
-    # Check that our interval is present in gfeatures and efeatures:
+    # Check that interval is present in gfeatures and efeatures
     iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
-    # The GenomicArrayOfSets yields steps. We check that at least one step contains "gene1"
     found_gene = False
     for iv2, val in gfeatures[iv].steps():
         if "gene1" in val:
@@ -116,7 +113,6 @@ def test_parse_malformed_gtf(tmp_path):
     gtf_file = tmp_path / "test.gtf"
     gtf_file.write_text(gtf_content)
     
-    # Call parse_gtf with BASECOLS from the main script
     with pytest.raises(ValueError):
         result = parse_gtf(str(gtf_file), BASECOLS)
 
@@ -170,7 +166,6 @@ def test_read_wrong_strand():
     """
     A read on the wrong strand should not count as overlapping the feature.
     """
-    # Create arrays with strandedness.
     gfeatures = HTSeq.GenomicArrayOfSets("auto", stranded=True)
     efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=True)
     iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
@@ -228,7 +223,6 @@ def test_readtrack_unique_overlap():
     """
     iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
     rt = create_readtrack("read_unique_UMI", iv)
-    # Set up features so that only gene1 (with exon 'exon1') is present.
     gfeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     gfeatures[iv] += "gene1"
@@ -266,10 +260,8 @@ def test_readtrack_ambiguous():
     rt = create_readtrack("read_ambiguous", iv)
     gfeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
-    # Overlap two genes:
     gfeatures[iv] += "gene1"
     gfeatures[iv] += "gene2"
-    # Exons from different genes:
     efeatures[iv] += "exon1"
     efeatures[iv] += "exon2"
     dummy_eattributes = {
@@ -308,14 +300,12 @@ def test_readtrack_multiple_overlap_single_gene():
     
     assert rt.category == ""
     assert rt.gene_to_count == "gene1"
-    # In this simplified case we assign exon_to_count equal to gene.
     assert rt.exon_to_count == "gene1"
 
 def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     """
     Test parse_bam_and_count with a simple single-gene scenario.
     """
-
     # Build a dummy GTF dump with one gene "gene1" and exon information.
     ivgene = HTSeq.GenomicInterval("chr1", 100, 400, "+")
     ivexon1 = HTSeq.GenomicInterval("chr1", 100, 200, "+")
@@ -327,7 +317,6 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     ]
     gtf_data = get_dummy_gtf_dump(genes_intervals)
     
-    # Create bundles.
     # Bundle 1: paired read with UMI "UMI1" overlapping gene1
     bundle1 = [(DummyAlignment("read1_UMI1", True, ivgene), 
                 DummyAlignment("read1_UMI1", True, ivgene))]
@@ -389,7 +378,6 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
     ]
     gtf_data = get_dummy_gtf_dump(genes_intervals)
     
-    # Create bundles.
     # Bundle 1: proper paired read with UMI "UMI1" overlapping gene1
     bundle1 = [(DummyAlignment("read1_UMI1", True, ivgene1), 
                 DummyAlignment("read1_UMI1", True, ivgene1))]
@@ -440,7 +428,6 @@ def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
     ]
     gtf_data = get_dummy_gtf_dump(genes_intervals)
     
-    # Create bundles.
     # Bundle 1: proper paired read with UMI to gene1
     bundle1 = [(DummyAlignment("read1_UMI1", True, ivgene1), 
                 DummyAlignment("read1_UMI1", True, ivgene1))]
