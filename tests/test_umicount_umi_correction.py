@@ -94,7 +94,6 @@ def test_countsratio_threshold():
                             hamming_threshold=1)
     assert result == {'AAAA': 35}
 
-
     result = umi_correction(input_dict, 
                             countratio=3, # higher merging threshold
                             hamming_threshold=1)

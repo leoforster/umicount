@@ -35,7 +35,6 @@ def validate_cols_to_use(cols):
 
     return True
 
-
 def parse_gtf(gtffile, cols_to_use=None, 
               exon_attr=['gene_id', 'gene_name', 'exon_number'], 
               gene_attr=['gene_name']):
