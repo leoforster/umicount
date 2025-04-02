@@ -303,7 +303,7 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                                               countratio=countratio_threshold, 
                                               hamming_threshold=hamming_threshold)
 
-                if do_deup:
+                if do_dedup:
                     gcounts[g]['UI'] = len(UI_corrected.keys())
                     gcounts[g]['UE'] = len(UE_corrected.keys())
                     gcounts[g]['D'] = sum(UI_corrected.values()) - gcounts[g]['UI'] + \

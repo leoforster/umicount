@@ -72,15 +72,15 @@ def umicount():
     parser.add_argument("-d", "--no_dedup", action="store_true", default=False,
                         help="dont deduplicate UMI counts")
     parser.add_argument("-m", "--combine_unspliced", action="store_true", default=False,
-                        help="dont distinguish spliced and unspliced UMI counts, with both in UE")
+                        help="dont distinguish spliced and unspliced UMI counts, instead as U")
     parser.add_argument("-c", "--UMI_correct", action="store_true", default=False, 
                         help=( "Enable gene-wise UMI correction by hamming distance " 
                                "requires python RapidFuzz library to be installed") )
     parser.add_argument("--hamming_threshold", action="store", type=int, default=1,
                         help="Hamming distance threshold for merging similar UMIs, usually 1")
     parser.add_argument("--count_ratio_threshold", action="store", type=int, default=2,
-                        help=("Threshold where UMIs are only merged if they differ "
-                              "in counts by a factor of (2*threshold)-1"))
+                        help=("Threshold where UMIs are only merged if one has more "
+                              "counts by a factor of (threshold*counts)-1"))
     parser.add_argument("-o", "--output", type=existing_dir, help="Path to output counts matrix")
     
     r = parser.parse_args()
