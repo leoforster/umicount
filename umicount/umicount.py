@@ -16,7 +16,7 @@ def validate_cols_to_use(cols):
         return False
 
     valid_fields = ['UI', 'UE', 'RI', 'RE', 'D']
-    if len([i for i in cols if i not in valid_fields]) > 0:
+    if any(col not in valid_fields for col in cols):
         print('malformed columns contains invalid values (expected %s)' %valid_fields)
         return False
 
@@ -239,46 +239,44 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
         if readpair.can_do_overlap(): readpair.find_overlap(gfeatures, efeatures)
         if readpair.can_do_overlap(): readpair.evaluate_overlap(eattributes)
 
-        # add to counts for cell
-        if readpair.gene_to_count == "": # non-gene-counts default to RE
-            gcounts[readpair.category]['RE'] += 1 
+        # now count read at appropriate category based on overlap
+        if readpair.gene_to_count == "": # no gene overlap
+            gcounts[readpair.category]['UE' if readpair.umi else 'RE'] += 1 
 
         else: # have gene-counts
             if readpair.umi:
-                if readpair.exon_to_count == "":
-                    dkey = 'U' if combine_unspliced else 'UI'
-                    geneumis[readpair.gene_to_count][dkey].setdefault(readpair.umi, 0)
-                    geneumis[readpair.gene_to_count][dkey][readpair.umi] += 1
-                else:
-                    dkey = 'U' if combine_unspliced else 'UE'
-                    geneumis[readpair.gene_to_count][dkey].setdefault(readpair.umi, 0)
-                    geneumis[readpair.gene_to_count][dkey][readpair.umi] += 1
+                rkey = 'U' if combine_unspliced else \
+                       ('UI' if readpair.exon_to_count == "" else 'UE')
+                rgene = readpair.gene_to_count
+                rumi = readpair.umi
+                geneumis[rgene][rkey][rumi] = geneumis[rgene][rkey].get(rumi, 0) + 1
 
             else:
-                if readpair.exon_to_count == "": # gene exists, no exon --> is intron
-                    gcounts[readpair.gene_to_count]['RI'] += 1
-                else: # gene exists, has exon --> is exon
-                    gcounts[readpair.gene_to_count]['RE'] += 1
+                rkey = 'RI' if readpair.exon_to_count == "" else 'RE'
+                gcounts[readpair.gene_to_count][rkey] += 1
 
     # parsed all reads into gene overlaps, now process UMI counts
-    if umi_correct_params is None:
-        # no UMI correction
+    if umi_correct_params is None: # no UMI correction
         for g in geneumis.keys():
             if combine_unspliced:
+                umisum = sum(geneumis[g]['U'].values())
+                umilen = len(geneumis[g]['U'])
+
                 if do_dedup:
-                    gcounts[g]['U'] = len(geneumis[g]['U'])
-                    gcounts[g]['D'] = sum(geneumis[g]['U']) - gcounts[g]['U']
+                    gcounts[g]['U'] = umilen
+                    gcounts[g]['D'] = umisum - umilen
                 else:
-                    gcounts[g]['U'] = sum(geneumis[g]['U'].values())
-            else:
+                    gcounts[g]['U'] = umisum
+            else: 
+                for uie in ['UI', 'UE']:
+                    umisum = sum(geneumis[g][uie].values())
+                    umilen = len(geneumis[g][uie])
+
+                    gcounts[g][uie] = umilen if do_dedup else umisum
+
                 if do_dedup:
-                    gcounts[g]['UI'] = len(geneumis[g]['UI'])
-                    gcounts[g]['UE'] = len(geneumis[g]['UE'])
                     gcounts[g]['D'] = sum(geneumis[g]['UI'].values()) - gcounts[g]['UI'] + \
                                       sum(geneumis[g]['UE'].values()) - gcounts[g]['UE']
-                else:
-                    gcounts[g]['UI'] = sum(geneumis[g]['UI'].values())
-                    gcounts[g]['UE'] = sum(geneumis[g]['UE'].values())
 
     else:
         # counts with UMI correction

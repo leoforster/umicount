@@ -355,7 +355,7 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     assert gene1_counts["RI"] == 1 # from bundle3
 
     unmapped = counts["_unmapped"] # from bundle4
-    assert unmapped["RE"] == 1
+    assert unmapped["UE"] == 1
 
     multimapping = counts["_multimapping"] # from bundle5
     assert multimapping["RE"] == 1
