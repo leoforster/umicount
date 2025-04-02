@@ -67,27 +67,50 @@ def umicount():
     parser.add_argument("-f", "--files", type=existing_file, default=[], nargs="*",
                         help="input bamfiles from modified fastqs, sorted by read")
     parser.add_argument("-g", "--gtf", type=existing_file, help="input GTF file (ensembl format)")
-    parser.add_argument("--GTF-dump", type=existing_dir, help="File path to dump parsed GTF data")
-    parser.add_argument("--GTF-skip-parse", type=existing_file, help="Path to dumped GTF data")
-    parser.add_argument("-d", "--nodupes", action="store_true", default=False,
-                        help="dont report UMI duplicates per gene per cell")
+    parser.add_argument("--GTF_dump", type=existing_dir, help="File path to dump parsed GTF data")
+    parser.add_argument("--GTF_skip_parse", type=existing_file, help="Path to dumped GTF data")
+    parser.add_argument("-d", "--no_dedup", action="store_true", default=False,
+                        help="dont deduplicate UMI counts")
+    parser.add_argument("-m", "--combine_unspliced", action="store_true", default=False,
+                        help="dont distinguish spliced and unspliced UMI counts, with both in UE")
+    parser.add_argument("-c", "--UMI_correct", action="store_true", default=False, 
+                        help=( "Enable gene-wise UMI correction by hamming distance " 
+                               "requires python RapidFuzz library to be installed") )
+    parser.add_argument("--hamming_threshold", action="store", type=int, default=1,
+                        help="Hamming distance threshold for merging similar UMIs, usually 1")
+    parser.add_argument("--count_ratio_threshold", action="store", type=int, default=2,
+                        help=("Threshold where UMIs are only merged if they differ "
+                              "in counts by a factor of (2*threshold)-1"))
     parser.add_argument("-o", "--output", type=existing_dir, help="Path to output counts matrix")
     
     r = parser.parse_args()
 
     if r.gtf is None and r.GTF_skip_parse is None:
-        print('require one of --gtf, --GTF-skip-parse')
+        print('require one of --gtf, --GTF_skip_parse')
         sys.exit()
 
     if (len(r.files) == 0 or r.output is None) and not (r.gtf and r.GTF_dump):
-        print('no input files found, skipping input only valid with --gtf and --GTF-dump')
+        print('no input files found, skipping input only valid with --gtf and --GTF_dump')
         sys.exit()
+
+    basecols = ['RE', 'RI']
+    if r.combine_unspliced:
+        basecols.append(['U'])
+    else:
+        basecols.append(['UE', 'UI'])
+    if r.nodupes == False:
+        basecols.append(['D'])
 
     if r.gtf and r.GTF_dump:
         load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump)
         if len(r.files) > 0 and r.output:
             print('counting UMIs in %s' %r.files[0])
             process_bam(r.files[0], r.gtf, r.output, 
-                        skipgtf=r.GTF_dump, skipdup=r.nodupes)
+                        skipgtf=r.GTF_dump, cols_to_use=basecols,
+                        combine_unspliced=r.combine_unspliced)
     else:
-        process_bam(r.files[0], r.gtf, r.output, r.GTF_skip_parse, r.nodupes)
+        process_bam(r.files[0], r.gtf, r.output, skipgtf=r.GTF_skip_parse, 
+                    cols_to_use=basecols, combine_unspliced=r.combine_unspliced,
+                    umi_correct_params={'countratio_threshold':r.count_ratio_threshold,
+                                        'hamming_threshold':r.hamming_threshold} \
+                                        if r.UMI_correct else None)

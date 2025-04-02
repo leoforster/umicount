@@ -7,14 +7,42 @@ from dataclasses import dataclass, field
 from typing import Any, Tuple, List
 
 import HTSeq
+from rapidfuzz.distance import Hamming
 
-BASECOLS = ['UE', 'RE', 'UI', 'RI', 'D']
+def validate_cols_to_use(cols):
+    # because cols_to_use values direct downstream logic inplace of function args
+    if cols is None: 
+        print('malformed columns: columns set is empty')
+        return False
 
-def parse_gtf(gtffile, cols, 
+    valid_fields = ['UI', 'UE', 'RI', 'RE', 'D']
+    if len([i for i in cols if i not in valid_fields]) > 0:
+        print('malformed columns contains invalid values (expected %s)' %valid_fields)
+        return False
+
+    if 'RE' not in cols and 'RI' not in cols:
+        print('malformed columns supplied, need at least RE, RI and (U or UE, UI')
+        return False
+
+    has_UIE = 'UI' in cols or 'UE' in cols
+    has_U = 'U' in cols
+    if has_UIE and has_U:
+        print('malformed columns contains (UE, UI) and U')
+        return False
+    if has_UIE and not ('UI' in cols and 'UE' in cols):
+        print('malformed columns contains UE or UI but not both')
+        return False
+
+    return True
+
+
+def parse_gtf(gtffile, cols_to_use=None, 
               exon_attr=['gene_id', 'gene_name', 'exon_number'], 
               gene_attr=['gene_name']):
 
-    default = {i:0 for i in cols}
+    assert validate_cols_to_use(cols_to_use)
+
+    default = {i:0 for i in cols_to_use}
     gcounts = {'_unmapped':default.copy(), '_multimapping':default.copy(),
                '_no_feature':default.copy(), '_ambiguous':default.copy(), '_FAIL':default.copy()}
     gattributes = {}
@@ -66,17 +94,13 @@ def read_gtf_dump(dump_path):
     with open(dump_path, 'rb') as inp:
         return pickle.load(inp)
 
-def load_gtf_data(gtffile, 
-                  skipgtf=None, dumpgtf=None,
-                  cols=BASECOLS):
-    """
-    Load GTF data either by reading a pre-parsed dump (if skipgtf is provided)
-    or by parsing the GTF file. Optionally, dump the parsed data.
-    """
-    if skipgtf:
+def load_gtf_data(gtffile, skipgtf=None, dumpgtf=None, cols=None):
+
+    if skipgtf: # load GTF from pre-parsed dump
         print('Reading pre-parsed GTF data from:', skipgtf)
         return read_gtf_dump(skipgtf)
-    else:
+
+    else: # parse anew
         print('Parsing GTF file:', gtffile)
         gtf_data = parse_gtf(gtffile, cols)
         if dumpgtf:
@@ -86,7 +110,7 @@ def load_gtf_data(gtffile,
 
 @dataclass
 class ReadTrack:
-    # track information from a PE read
+    # track information from a paired-end read
     read1_almnt: Any
     read2_almnt: Any
     umi: Any = field(init=False)
@@ -111,6 +135,7 @@ class ReadTrack:
         gene_ids = set()
         exon_ids = set()
         try:
+            # overlap loop as in HTSeq count.py
             for almnt in [self.read1_almnt, self.read2_almnt]:
                 for iv, val in gfeatures[almnt.iv].steps():
                     gene_ids = gene_ids.union(val)
@@ -119,6 +144,7 @@ class ReadTrack:
                 for iv, val in efeatures[almnt.iv].steps():
                     exon_ids = exon_ids.union(val)
                 self.exon_overlap = list(exon_ids) # ids of overlapping exons
+
         except KeyError:
             # weird bug where features doesnt contain scaffold chr
             self.category = '_FAIL'
@@ -130,10 +156,12 @@ class ReadTrack:
 
         if len(self.gene_overlap) == 0: # intergenic
             self.category = '_no_feature'
+
         elif len(self.gene_overlap) == 1:
             self.gene_to_count = self.gene_overlap[0]
             if len(self.exon_overlap) > 0: # exons of that gene
                 self.exon_to_count = self.exon_overlap[0]
+
         else: # when multiple genes overlap
             exongenes = {eattributes[eid][0] for eid in self.exon_overlap \
                          if eid in eattributes} # get gene ids from attribute
@@ -141,6 +169,7 @@ class ReadTrack:
                 self.gene_to_count = self.exon_to_count = exongenes.pop()
             else: # if exons overlap or intronic in both: its ambiguous
                 self.category = '_ambiguous'
+
         return self
 
 def extract_first_alignment(bundle):
@@ -149,17 +178,56 @@ def extract_first_alignment(bundle):
         return ReadTrack(read1_almnt=[i for i in firstpair if i][0],
                          read2_almnt=None,
                          category='_unmapped')
+
     if not (firstpair[0].aligned and firstpair[1].aligned):
         return ReadTrack(read1_almnt=firstpair[0],
                          read2_almnt=None,
                          category='_unmapped')
+
     return ReadTrack(read1_almnt=firstpair[0], read2_almnt=firstpair[1])
 
-def parse_bam_and_count(bamfile, gtf_data):
+def umi_correction(umicounts, countratio=2, hamming_threshold=1):
+        
+    # UMIs sorted by decreasing counts
+    umisort = sorted(umicounts.items(), key=lambda x: x[1], reverse=True)
+    corrected = {}
+
+    while umisort:
+        seed, seed_count = umisort.pop(0) # highest counts UMI
+        corrected[seed] = seed_count
+        if seed_count <= 0: 
+            raise ValueError(f"UMI ({seed}) has 0 or fewer counts")
+
+        # iterate backwards from low to high UMI counts
+        i = len(umisort) - 1
+        while i >= 0:
+            candidate, candidate_count = umisort[i]
+            if candidate_count <= 0:
+                raise ValueError(f"UMI ({seed}) has 0 or fewer counts")
+
+            if ((countratio * candidate_count) - 1) > seed_count:
+                break # can break since remaining UMIs counts are higher
+                
+            if Hamming.distance(seed, candidate, pad=False) <= hamming_threshold:
+                corrected[seed] += candidate_count
+                umisort.pop(i)
+
+            i -= 1
+
+    return corrected
+            
+def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=None):
+
+    assert validate_cols_to_use(cols_to_use)
+    combine_unspliced = ('U' in cols_to_use)
+    do_dedup = ('D' in cols_to_use)
+
     gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
     bam_reader = HTSeq.BAM_Reader(bamfile)
-    umicheck = {key: {} for key in gcounts.keys()} # for tracking duplicates
+    geneumis = {i:({'U':{}} if combine_unspliced else {'UE':{}, 'UI':{}}) \
+                for i in gcounts.keys() if not i.startswith('_')} # prep corr and dedup
 
+    # iterate over reads and assign feature overlaps
     for bundle in HTSeq.pair_SAM_alignments(bam_reader, bundle=True):
         if not bundle:
             continue
@@ -173,31 +241,83 @@ def parse_bam_and_count(bamfile, gtf_data):
         if readpair.can_do_overlap(): readpair.evaluate_overlap(eattributes)
 
         # add to counts for cell
-        countskey = 'U' if readpair.umi else 'R'
-        if readpair.gene_to_count == "":
-            # non-gene-counts default in exon column
-            gcounts[readpair.category][countskey+'E'] += 1
-        else:
-            if readpair.umi: # have gene-counts, so first deduplicate
-                if readpair.umi in umicheck[readpair.gene_to_count]:
-                    umicheck[readpair.gene_to_count][readpair.umi] += 1
-                    continue
+        if readpair.gene_to_count == "": # non-gene-counts default to RE
+            gcounts[readpair.category]['RE'] += 1 
+
+        else: # have gene-counts
+            if readpair.umi:
+                if readpair.exon_to_count == "":
+                    dkey = 'U' if combine_unspliced else 'UI'
+                    geneumis[readpair.gene_to_count][dkey].setdefault(readpair.umi, 0)
+                    geneumis[readpair.gene_to_count][dkey][readpair.umi] += 1
                 else:
-                    umicheck[readpair.gene_to_count][readpair.umi] = 1
+                    dkey = 'U' if combine_unspliced else 'UE'
+                    geneumis[readpair.gene_to_count][dkey].setdefault(readpair.umi, 0)
+                    geneumis[readpair.gene_to_count][dkey][readpair.umi] += 1
 
-            if readpair.exon_to_count == "": # gene exists, no exon --> is intron
-                gcounts[readpair.gene_to_count][countskey+'I'] += 1
-            else: # gene exists, has exon --> is exon
-                gcounts[readpair.gene_to_count][countskey+'E'] += 1
+            else:
+                if readpair.exon_to_count == "": # gene exists, no exon --> is intron
+                    gcounts[readpair.gene_to_count]['RI'] += 1
+                else: # gene exists, has exon --> is exon
+                    gcounts[readpair.gene_to_count]['RE'] += 1
 
-    # report umi duplicate counts for cell
-    for gene, umi_dict in umicheck.items():
-        if gene.startswith('_'):
-            continue
-        gcounts[gene]['D'] = sum(umi_dict.values()) - (gcounts[gene]['UI'] + gcounts[gene]['UE'])
+    # parsed all reads into gene overlaps, now process UMI counts
+    if umi_correct_params is None:
+        # no UMI correction
+        for g in geneumis.keys():
+            if combine_unspliced:
+                if do_dedup:
+                    gcounts[g]['U'] = len(geneumis[g]['U'])
+                    gcounts[g]['D'] = sum(geneumis[g]['U']) - gcounts[g]['U']
+                else:
+                    gcounts[g]['U'] = sum(geneumis[g]['U'].values())
+            else:
+                if do_dedup:
+                    gcounts[g]['UI'] = len(geneumis[g]['UI'])
+                    gcounts[g]['UE'] = len(geneumis[g]['UE'])
+                    gcounts[g]['D'] = sum(geneumis[g]['UI'].values()) - gcounts[g]['UI'] + \
+                                      sum(geneumis[g]['UE'].values()) - gcounts[g]['UE']
+                else:
+                    gcounts[g]['UI'] = sum(geneumis[g]['UI'].values())
+                    gcounts[g]['UE'] = sum(geneumis[g]['UE'].values())
+
+    else:
+        # counts with UMI correction
+        countratio_threshold = umi_correct_params['countratio_threshold']
+        hamming_threshold = umi_correct_params['hamming_threshold']
+
+        for g in geneumis.keys():
+            if combine_unspliced:
+                UIE_corrected = umi_correction(geneumis[g]['U'], 
+                                               countratio=countratio_threshold, 
+                                               hamming_threshold=hamming_threshold)
+
+                if do_dedup:
+                    gcounts[g]['U'] = len(UIE_corrected.keys()) # unique UMIs
+                    gcounts[g]['D'] = sum(UIE_corrected.values()) - gcounts[g]['U']
+                else:
+                    gcounts[g]['U'] = sum(UIE_corrected.values()) # total UMI counts
+
+            else:
+                UI_corrected = umi_correction(geneumis[g]['UI'], 
+                                              countratio=countratio_threshold, 
+                                              hamming_threshold=hamming_threshold)
+                UE_corrected = umi_correction(geneumis[g]['UE'], 
+                                              countratio=countratio_threshold, 
+                                              hamming_threshold=hamming_threshold)
+
+                if do_deup:
+                    gcounts[g]['UI'] = len(UI_corrected.keys())
+                    gcounts[g]['UE'] = len(UE_corrected.keys())
+                    gcounts[g]['D'] = sum(UI_corrected.values()) - gcounts[g]['UI'] + \
+                                      sum(UE_corrected.values()) - gcounts[g]['UE']
+                else:
+                    gcounts[g]['UI'] = sum(UI_corrected.values())
+                    gcounts[g]['UE'] = sum(UE_corrected.values())
     return gcounts
 
 def write_counts(outfile, bamfile, results, gene_counts, gattributes, cols_to_use):
+    assert validate_cols_to_use(cols_to_use)
     with open(outfile, 'w') as out:
         header_fields = [os.path.basename(bamfile)]
         for b in cols_to_use:
@@ -209,16 +329,17 @@ def write_counts(outfile, bamfile, results, gene_counts, gattributes, cols_to_us
                 line_fields.append(str(results[gene][b]))
             out.write('\t'.join(line_fields) + '\n')
 
-def process_bam(bamfile, gtffile, outfile, 
-                skipgtf=None, skipdup=False):
+def process_bam(bamfile, gtffile, outfile, skipgtf=None, 
+                cols_to_use=None, umi_correct_params=None):
+
+    assert validate_cols_to_use(cols_to_use)
+
     # Load or parse the GTF data
-    gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None, cols=BASECOLS)
+    gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None, cols=cols_to_use)
     gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
 
-    results = parse_bam_and_count(bamfile, gtf_data)
-
-    cols_to_use = BASECOLS.copy()
-    if skipdup:
-        cols_to_use = [col for col in cols_to_use if col != 'D']
+    results = parse_bam_and_count(bamfile, gtf_data, 
+                                  cols_to_use=cols_to_use, 
+                                  umi_correct_params=umi_correct_params)
 
     write_counts(outfile, bamfile, results, gcounts, gattributes, cols_to_use)

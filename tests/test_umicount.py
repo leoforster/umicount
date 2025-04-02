@@ -6,8 +6,7 @@ from umicount.umicount import (
     parse_gtf,
     ReadTrack,
     extract_first_alignment,
-    parse_bam_and_count,
-    BASECOLS,
+    parse_bam_and_count
 )
 
 ############################
@@ -36,14 +35,14 @@ def dummy_pair_SAM_alignments_factory(bundles):
             yield b
     return generator
 
-def get_dummy_gtf_dump(genes_intervals):
+def get_dummy_gtf_dump(genes_intervals, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D']):
     """
     Build a dummy GTF dump to be used by parse_bam_and_count.
     genes_intervals is a list of tuples:
        (gene_id, gene_name, exon_id, interval, include_exon)
 
     """
-    default = {col: 0 for col in BASECOLS}
+    default = {col: 0 for col in cols_to_use}
     gcounts = {"_unmapped": default.copy(),
                "_multimapping": default.copy(),
                "_no_feature": default.copy(),
@@ -84,7 +83,7 @@ def test_parse_gtf(tmp_path):
     )
     gtf_file = tmp_path / "test.gtf"
     gtf_file.write_text(gtf_content)
-    result = parse_gtf(str(gtf_file), BASECOLS)
+    result = parse_gtf(str(gtf_file), cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
     gcounts, gfeatures, efeatures, gattributes, eattributes = result
 
     # Check that gene1 is in the counts and attributes
@@ -114,7 +113,7 @@ def test_parse_malformed_gtf(tmp_path):
     gtf_file.write_text(gtf_content)
     
     with pytest.raises(ValueError):
-        result = parse_gtf(str(gtf_file), BASECOLS)
+        result = parse_gtf(str(gtf_file), cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
 
 def test_extract_first_alignment():
     """
@@ -347,7 +346,7 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts = parse_bam_and_count("dummy.bam", gtf_data)
+    counts = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
     
     gene1_counts = counts["gene1"]
     assert gene1_counts["UE"] == 1 # from bundle1
@@ -356,7 +355,7 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     assert gene1_counts["RI"] == 1 # from bundle3
 
     unmapped = counts["_unmapped"] # from bundle4
-    assert unmapped["UE"] == 1
+    assert unmapped["RE"] == 1
 
     multimapping = counts["_multimapping"] # from bundle5
     assert multimapping["RE"] == 1
@@ -404,7 +403,7 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts = parse_bam_and_count("dummy.bam", gtf_data)
+    counts = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
     
     gene1_counts = counts["gene1"]
     gene2_counts = counts["gene2"]
@@ -449,8 +448,8 @@ def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts = parse_bam_and_count("dummy.bam", gtf_data)
-    
+    counts = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
+
     gene1_counts = counts["gene1"]
     gene2_counts = counts["gene2"]
     
