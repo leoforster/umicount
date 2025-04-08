@@ -93,7 +93,7 @@ def read_gtf_dump(dump_path):
     with open(dump_path, 'rb') as inp:
         return pickle.load(inp)
 
-def load_gtf_data(gtffile, skipgtf=None, dumpgtf=None, cols=None):
+def load_gtf_data(gtffile, skipgtf=None, dumpgtf=None, cols_to_use=None):
 
     if skipgtf: # load GTF from pre-parsed dump
         print('Reading pre-parsed GTF data from:', skipgtf)
@@ -101,7 +101,8 @@ def load_gtf_data(gtffile, skipgtf=None, dumpgtf=None, cols=None):
 
     else: # parse anew
         print('Parsing GTF file:', gtffile)
-        gtf_data = parse_gtf(gtffile, cols)
+        assert validate_cols_to_use(cols_to_use) # check cols
+        gtf_data = parse_gtf(gtffile, cols_to_use)
         if dumpgtf:
             print('Dumping parsed GTF data to:', dumpgtf)
             dump_gtf(dumpgtf, gtf_data)

@@ -95,22 +95,25 @@ def umicount():
 
     basecols = ['RE', 'RI']
     if r.combine_unspliced:
-        basecols.append(['U'])
+        basecols += ['U']
     else:
-        basecols.append(['UE', 'UI'])
-    if r.nodupes == False:
-        basecols.append(['D'])
+        basecols += ['UE', 'UI']
+    if r.no_dedup == False:
+        basecols += ['D']
+
+    umi_correct_params = {'countratio_threshold':r.count_ratio_threshold,
+                          'hamming_threshold':r.hamming_threshold} \
+                          if r.UMI_correct else None
 
     if r.gtf and r.GTF_dump:
-        load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump)
+        load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump, cols=basecols)
         if len(r.files) > 0 and r.output:
             print('counting UMIs in %s' %r.files[0])
             process_bam(r.files[0], r.gtf, r.output, 
                         skipgtf=r.GTF_dump, cols_to_use=basecols,
-                        combine_unspliced=r.combine_unspliced)
+                        combine_unspliced=r.combine_unspliced,
+                        umi_correct_params=umi_correct_params)
     else:
         process_bam(r.files[0], r.gtf, r.output, skipgtf=r.GTF_skip_parse, 
                     cols_to_use=basecols, combine_unspliced=r.combine_unspliced,
-                    umi_correct_params={'countratio_threshold':r.count_ratio_threshold,
-                                        'hamming_threshold':r.hamming_threshold} \
-                                        if r.UMI_correct else None)
+                    umi_correct_params=umi_correct_params)
