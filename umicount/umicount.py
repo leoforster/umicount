@@ -333,9 +333,10 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
     assert validate_cols_to_use(cols_to_use)
 
     # Load or parse the GTF data
-    gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None, cols=cols_to_use)
+    gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None, cols_to_use=cols_to_use)
     gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
 
+    print('parsing and counting reads from BAM file: %s' %bamfile)
     results = parse_bam_and_count(bamfile, gtf_data, 
                                   cols_to_use=cols_to_use, 
                                   umi_correct_params=umi_correct_params)

@@ -185,10 +185,11 @@ def test_process_entry_searchregion_length():
 
     pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
 
-    with pytest.raises(SystemExit):
-        for r in r1_reads:
-            entry = htseq.SequenceWithQualities(r[1].encode(), r[0], ('I'*len(r[1])).encode())
-            entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False, search_region=search_region,
-                                                 anchor_seq=anchor_seq, trailing_seq=trailing_seq,
-                                                 fuzzy_umi_params=None)
+    for r in r1_reads:
+        entry = htseq.SequenceWithQualities(r[1].encode(), r[0], ('I'*len(r[1])).encode())
+        entry_processed, umi = process_entry(entry, pattern, umi_len, only_umi=False, search_region=search_region,
+                                             anchor_seq=anchor_seq, trailing_seq=trailing_seq,
+                                             fuzzy_umi_params=None)
 
+        assert entry_processed is None
+        assert umi is None

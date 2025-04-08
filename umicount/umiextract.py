@@ -35,10 +35,8 @@ def process_entry(entry, pattern, umi_len, only_umi,
     pattern_len = len(anchor_seq) + umi_len + len(trailing_seq)
 
     if search_region > 0:
-        if search_region + pattern_len > len(seq_str):
-            print( ('read length of %sbp not compatible with search_region '
-                    'of %s and %sbp pattern' %(len(seq_str), search_region, pattern_len)) )
-            sys.exit()
+        if search_region + pattern_len > len(seq_str): # read to short to search
+            return (None, None)
         else:
             seq_str = seq_str[:search_region + pattern_len] # trim to search_region
 

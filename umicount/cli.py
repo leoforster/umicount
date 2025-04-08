@@ -106,14 +106,12 @@ def umicount():
                           if r.UMI_correct else None
 
     if r.gtf and r.GTF_dump:
-        load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump, cols=basecols)
+        load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump, cols_to_use=basecols)
         if len(r.files) > 0 and r.output:
             print('counting UMIs in %s' %r.files[0])
             process_bam(r.files[0], r.gtf, r.output, 
                         skipgtf=r.GTF_dump, cols_to_use=basecols,
-                        combine_unspliced=r.combine_unspliced,
                         umi_correct_params=umi_correct_params)
     else:
         process_bam(r.files[0], r.gtf, r.output, skipgtf=r.GTF_skip_parse, 
-                    cols_to_use=basecols, combine_unspliced=r.combine_unspliced,
-                    umi_correct_params=umi_correct_params)
+                    cols_to_use=basecols, umi_correct_params=umi_correct_params)
