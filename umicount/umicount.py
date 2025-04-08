@@ -1,7 +1,7 @@
 import sys
 import os
 import multiprocessing as mp
-import argparse
+from collections import defaultdict
 import pickle
 from dataclasses import dataclass, field
 from typing import Any, Tuple, List
@@ -15,7 +15,7 @@ def validate_cols_to_use(cols):
         print('malformed columns: columns set is empty')
         return False
 
-    valid_fields = ['UI', 'UE', 'RI', 'RE', 'D']
+    valid_fields = ['UI', 'UE', 'RI', 'RE', 'D', 'R', 'U']
     if any(col not in valid_fields for col in cols):
         print('malformed columns contains invalid values (expected %s)' %valid_fields)
         return False
@@ -35,15 +35,8 @@ def validate_cols_to_use(cols):
 
     return True
 
-def parse_gtf(gtffile, cols_to_use=None, 
-              exon_attr=['gene_id', 'gene_name', 'exon_number'], 
-              gene_attr=['gene_name']):
+def parse_gtf(gtffile, exon_attr=['gene_id', 'gene_name', 'exon_number'], gene_attr=['gene_name']):
 
-    assert validate_cols_to_use(cols_to_use)
-
-    default = {i:0 for i in cols_to_use}
-    gcounts = {'_unmapped':default.copy(), '_multimapping':default.copy(),
-               '_no_feature':default.copy(), '_ambiguous':default.copy(), '_FAIL':default.copy()}
     gattributes = {}
     eattributes = {}
     additional_attributes = {'exon':exon_attr, 'gene':gene_attr}
@@ -75,7 +68,6 @@ def parse_gtf(gtffile, cols_to_use=None,
 
                 # store raw/umi for gene counts, intron, and exon
                 gfeatures[f.iv] += feature_id
-                gcounts[feature_id] = default.copy() 
                 gattributes[feature_id] = [f.attr.get(attr, '') \
                                            for attr in additional_attributes[f.type]]
     except:
@@ -83,7 +75,7 @@ def parse_gtf(gtffile, cols_to_use=None,
             "Error occured when processing GFF file (%s):\n" %gff.get_line_number_string())
         raise
 
-    return (gcounts, gfeatures, efeatures, gattributes, eattributes)
+    return (gfeatures, efeatures, gattributes, eattributes)
 
 def dump_gtf(dump_path, items):
     with open(dump_path, 'wb') as out:
@@ -93,15 +85,14 @@ def read_gtf_dump(dump_path):
     with open(dump_path, 'rb') as inp:
         return pickle.load(inp)
 
-def load_gtf_data(gtffile, skipgtf=None, dumpgtf=None, cols_to_use=None):
+def load_gtf_data(gtffile, skipgtf=None, dumpgtf=None):
 
     if skipgtf: # load GTF from pre-parsed dump
         return read_gtf_dump(skipgtf)
 
     else: # parse anew
         print('Parsing GTF file:', gtffile)
-        assert validate_cols_to_use(cols_to_use) # check cols
-        gtf_data = parse_gtf(gtffile, cols_to_use)
+        gtf_data = parse_gtf(gtffile)
         if dumpgtf:
             print('Dumping parsed GTF data to:', dumpgtf)
             dump_gtf(dumpgtf, gtf_data)
@@ -218,11 +209,15 @@ def umi_correction(umicounts, countratio=2, hamming_threshold=1):
 def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=None):
 
     assert validate_cols_to_use(cols_to_use)
-    combine_unspliced = ('U' in cols_to_use)
-    do_dedup = ('D' in cols_to_use)
+    combine_unspliced = 'U' in cols_to_use
+    do_dedup = 'D' in cols_to_use
 
-    gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
-    bam_reader = HTSeq.BAM_Reader(bamfile)
+    # assign GTF data and fill default columns
+    gfeatures, efeatures, gattributes, eattributes = gtf_data
+    gcounts = {}
+    category_cols = ['_unmapped', '_multimapping', '_no_feature', '_ambiguous', '_FAIL']
+    for g in category_cols + list(gattributes.keys()):
+        gcounts[g] = defaultdict(int)
 
     # read and UMI count tracking dicts
     geneumis = {i:({'U':{}} if combine_unspliced else {'UE':{}, 'UI':{}}) \
@@ -230,6 +225,7 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
     totalumis = {i:0 for i in cols_to_use + ['total', 'skipped', 'corrected']} 
 
     # iterate over reads and assign feature overlaps
+    bam_reader = HTSeq.BAM_Reader(bamfile)
     for bundle in HTSeq.pair_SAM_alignments(bam_reader, bundle=True):
         totalumis['total'] += 1
 
@@ -289,8 +285,9 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
         countratio_threshold = umi_correct_params['countratio_threshold']
         hamming_threshold = umi_correct_params['hamming_threshold']
 
-        for g in geneumis.keys():
-            if combine_unspliced:
+        
+        if combine_unspliced:
+            for g in geneumis.keys():
                 UIE_corrected = umi_correction(geneumis[g]['U'], 
                                                countratio=countratio_threshold, 
                                                hamming_threshold=hamming_threshold)
@@ -305,7 +302,8 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                 else:
                     gcounts[g]['U'] = sum(UIE_corrected.values()) # total UMI counts
 
-            else:
+        else:
+            for g in geneumis.keys():
                 UI_corrected = umi_correction(geneumis[g]['UI'], 
                                               countratio=countratio_threshold, 
                                               hamming_threshold=hamming_threshold)
@@ -335,14 +333,15 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
 
     return gcounts, totalumis
 
-def write_counts(outfile, bamfile, gene_counts, gcounts, gattributes, cols_to_use):
+def write_counts(outfile, bamfile, gene_counts, gattributes, cols_to_use):
     assert validate_cols_to_use(cols_to_use)
+
     with open(outfile, 'w') as out:
         header_fields = [os.path.basename(bamfile)]
         for b in cols_to_use:
             header_fields.append(b)
         out.write('\t'.join(header_fields) + '\n')
-        for gene, counts in gcounts.items():
+        for gene, counts in gene_counts.items():
             line_fields = [gene]
             for b in cols_to_use:
                 line_fields.append(str(gene_counts[gene][b]))
@@ -354,22 +353,22 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
     assert validate_cols_to_use(cols_to_use)
 
     # load or parse the GTF data
-    gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None, cols_to_use=cols_to_use)
-    gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
+    gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None)
+    gfeatures, efeatures, gattributes, eattributes = gtf_data
 
     # parsing BAM and count reads
     umicount, ttl = parse_bam_and_count(bamfile, gtf_data, 
                                         cols_to_use=cols_to_use, 
                                         umi_correct_params=umi_correct_params)
 
-    write_counts(outfile, bamfile, umicount, gcounts, gattributes, cols_to_use)
+    write_counts(outfile, bamfile, umicount, gattributes, cols_to_use)
 
     if sum(ttl.values()) > 0:
         sumstr = f"{os.path.basename(bamfile)}: {ttl['total']} reads, "
         sumstr += f"{ttl['skipped']} non-PE reads ({(ttl['skipped']/ttl['total'])*100:.2f}%), "
         for i in cols_to_use:
             sumstr += f"{ttl[i]} {i}-reads ({(ttl[i]/ttl['total'])*100:.2f}%), "
-        if umi_correct_params: sumstr += f"{ttl['corrected']} counts from corrected UMIs "
+        if umi_correct_params: sumstr += f"{ttl['corrected']} counts in corrected UMIs "
         print(sumstr)
     else:
         print(f"empty BAM file")

@@ -42,24 +42,17 @@ def get_dummy_gtf_dump(genes_intervals, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'
        (gene_id, gene_name, exon_id, interval, include_exon)
 
     """
-    default = {col: 0 for col in cols_to_use}
-    gcounts = {"_unmapped": default.copy(),
-               "_multimapping": default.copy(),
-               "_no_feature": default.copy(),
-               "_ambiguous": default.copy(),
-               "_FAIL": default.copy()}
     gfeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     gattributes = {}
     eattributes = {}
     for gene_id, gene_name, exon_id, interval, include_exon in genes_intervals:
-        gcounts[gene_id] = default.copy()
         gattributes[gene_id] = [gene_name]
         gfeatures[interval] += gene_id
         if include_exon:
             efeatures[interval] += exon_id
             eattributes[exon_id] = [gene_id, gene_name, "1"]
-    return (gcounts, gfeatures, efeatures, gattributes, eattributes)
+    return (gfeatures, efeatures, gattributes, eattributes)
 
 def create_readtrack(name, iv, aligned=True):
     """
@@ -83,15 +76,11 @@ def test_parse_gtf(tmp_path):
     )
     gtf_file = tmp_path / "test.gtf"
     gtf_file.write_text(gtf_content)
-    result = parse_gtf(str(gtf_file), cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
-    gcounts, gfeatures, efeatures, gattributes, eattributes = result
+    result = parse_gtf(str(gtf_file))
+    gfeatures, efeatures, gattributes, eattributes = result
 
     # Check that gene1 is in the counts and attributes
-    assert "gene1" in gcounts
     assert "gene1" in gattributes
-    # Check that dummy keys exist for non-gene categories
-    for key in ["_unmapped", "_multimapping", "_no_feature", "_ambiguous", "_FAIL"]:
-        assert key in gcounts
 
     # Check that interval is present in gfeatures and efeatures
     iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
@@ -113,7 +102,7 @@ def test_parse_malformed_gtf(tmp_path):
     gtf_file.write_text(gtf_content)
     
     with pytest.raises(ValueError):
-        result = parse_gtf(str(gtf_file), cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
+        result = parse_gtf(str(gtf_file))
 
 def test_extract_first_alignment():
     """
@@ -346,7 +335,7 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
+    counts, _ = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
     
     gene1_counts = counts["gene1"]
     assert gene1_counts["UE"] == 1 # from bundle1
@@ -403,7 +392,7 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
+    counts, _ = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
     
     gene1_counts = counts["gene1"]
     gene2_counts = counts["gene2"]
@@ -448,7 +437,7 @@ def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
+    counts, _ = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
 
     gene1_counts = counts["gene1"]
     gene2_counts = counts["gene2"]
