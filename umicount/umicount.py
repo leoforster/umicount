@@ -328,6 +328,11 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                     gcounts[g]['UI'] = sum(UI_corrected.values())
                     gcounts[g]['UE'] = sum(UE_corrected.values())
 
+    # update total counts
+    for g in gcounts.keys():
+        for i in cols_to_use:
+            totalumis[i] += gcounts[g][i]
+
     return gcounts, totalumis
 
 def write_counts(outfile, bamfile, gene_counts, gcounts, gattributes, cols_to_use):
@@ -364,11 +369,7 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
         sumstr += f"{ttl['skipped']} non-PE reads ({(ttl['skipped']/ttl['total'])*100:.2f}%), "
         for i in cols_to_use:
             sumstr += f"{ttl[i]} {i}-reads ({(ttl[i]/ttl['total'])*100:.2f}%), "
-        if umi_correct_params:
-            ttl_uses_U = 'U' in ttl.keys()
-            sumstr += f"{ttl['corrected']} counts from corrected UMIs "
-            sumstr += f"({(ttl['corrected']/ttl['U'])*100:.2f}%)" if ttl_uses_U \
-                        else f"({(ttl['corrected']/(ttl['UI'] + ttl['UE']))*100:.2f}%)"
+        if umi_correct_params: sumstr += f"{ttl['corrected']} counts from corrected UMIs "
         print(sumstr)
     else:
         print(f"empty BAM file")
