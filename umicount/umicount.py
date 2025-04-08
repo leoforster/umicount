@@ -244,14 +244,14 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
         rkey = 'U' if readpair.umi else 'R'
         if readpair.gene_to_count == '': # no gene overlap
             gcounts[readpair.category][rkey + 'E' if not combine_unspliced else ''] += 1
-            totalumis['uncounted'] += 1 # later check only cols_to_use
-        else:
+            totalumis['uncounted'] += 1
+
+        else: # has gene overlap
             if not combine_unspliced:
                 rkey += 'I' if readpair.exon_to_count == '' else 'E'
 
-            rgene = readpair.gene_to_count
             if readpair.umi: # store gene UMIs separately for deduplication/correction
-                geneumis[rgene][rkey][readpair.umi] += 1
+                geneumis[readpair.gene_to_count][rkey][readpair.umi] += 1
             else:
                 gcounts[readpair.gene_to_count][rkey] += 1
 
@@ -279,11 +279,9 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                     gcounts[g]['D'] = sum(geneumis[g]['UI'].values()) - gcounts[g]['UI'] + \
                                       sum(geneumis[g]['UE'].values()) - gcounts[g]['UE']
 
-    else:
-        # counts with UMI correction
+    else: # with UMI correction
         countratio_threshold = umi_correct_params['countratio_threshold']
         hamming_threshold = umi_correct_params['hamming_threshold']
-
         
         if combine_unspliced:
             for g in geneumis.keys():
