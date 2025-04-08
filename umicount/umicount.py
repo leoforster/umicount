@@ -96,7 +96,6 @@ def read_gtf_dump(dump_path):
 def load_gtf_data(gtffile, skipgtf=None, dumpgtf=None, cols_to_use=None):
 
     if skipgtf: # load GTF from pre-parsed dump
-        print('Reading pre-parsed GTF data from:', skipgtf)
         return read_gtf_dump(skipgtf)
 
     else: # parse anew
@@ -224,12 +223,18 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
 
     gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
     bam_reader = HTSeq.BAM_Reader(bamfile)
+
+    # read and UMI count tracking dicts
     geneumis = {i:({'U':{}} if combine_unspliced else {'UE':{}, 'UI':{}}) \
-                for i in gcounts.keys() if not i.startswith('_')} # prep corr and dedup
+                for i in gcounts.keys() if not i.startswith('_')} 
+    totalumis = {i:0 for i in cols_to_use + ['total', 'skipped', 'corrected']} 
 
     # iterate over reads and assign feature overlaps
     for bundle in HTSeq.pair_SAM_alignments(bam_reader, bundle=True):
+        totalumis['total'] += 1
+
         if not bundle:
+            totalumis['skipped'] += 1
             continue
 
         readpair = extract_first_alignment(bundle)
@@ -290,6 +295,10 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                                                countratio=countratio_threshold, 
                                                hamming_threshold=hamming_threshold)
 
+                # track sum of counts of corrected UMIs
+                totalumis['corrected'] += sum([UIE_corrected[i] for i in geneumis[g]['U'] \
+                                               if i in UIE_corrected.keys()])
+
                 if do_dedup:
                     gcounts[g]['U'] = len(UIE_corrected.keys()) # unique UMIs
                     gcounts[g]['D'] = sum(UIE_corrected.values()) - gcounts[g]['U']
@@ -304,6 +313,12 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                                               countratio=countratio_threshold, 
                                               hamming_threshold=hamming_threshold)
 
+                # track sum of counts of corrected UMIs
+                totalumis['corrected'] += sum([UI_corrected[i] for i in geneumis[g]['UI'] \
+                                               if i in UI_corrected.keys()])
+                totalumis['corrected'] += sum([UE_corrected[i] for i in geneumis[g]['UE'] \
+                                               if i in UE_corrected.keys()])
+
                 if do_dedup:
                     gcounts[g]['UI'] = len(UI_corrected.keys())
                     gcounts[g]['UE'] = len(UE_corrected.keys())
@@ -312,19 +327,20 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                 else:
                     gcounts[g]['UI'] = sum(UI_corrected.values())
                     gcounts[g]['UE'] = sum(UE_corrected.values())
-    return gcounts
 
-def write_counts(outfile, bamfile, results, gene_counts, gattributes, cols_to_use):
+    return gcounts, totalumis
+
+def write_counts(outfile, bamfile, gene_counts, gcounts, gattributes, cols_to_use):
     assert validate_cols_to_use(cols_to_use)
     with open(outfile, 'w') as out:
         header_fields = [os.path.basename(bamfile)]
         for b in cols_to_use:
             header_fields.append(b)
         out.write('\t'.join(header_fields) + '\n')
-        for gene, counts in gene_counts.items():
+        for gene, counts in gcounts.items():
             line_fields = [gene]
             for b in cols_to_use:
-                line_fields.append(str(results[gene][b]))
+                line_fields.append(str(gene_counts[gene][b]))
             out.write('\t'.join(line_fields) + '\n')
 
 def process_bam(bamfile, gtffile, outfile, skipgtf=None, 
@@ -332,13 +348,27 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
 
     assert validate_cols_to_use(cols_to_use)
 
-    # Load or parse the GTF data
+    # load or parse the GTF data
     gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None, cols_to_use=cols_to_use)
     gcounts, gfeatures, efeatures, gattributes, eattributes = gtf_data
 
-    print('parsing and counting reads from BAM file: %s' %bamfile)
-    results = parse_bam_and_count(bamfile, gtf_data, 
-                                  cols_to_use=cols_to_use, 
-                                  umi_correct_params=umi_correct_params)
+    # parsing BAM and count reads
+    umicount, ttl = parse_bam_and_count(bamfile, gtf_data, 
+                                        cols_to_use=cols_to_use, 
+                                        umi_correct_params=umi_correct_params)
 
-    write_counts(outfile, bamfile, results, gcounts, gattributes, cols_to_use)
+    write_counts(outfile, bamfile, umicount, gcounts, gattributes, cols_to_use)
+
+    if sum(ttl.values()) > 0:
+        sumstr = f"{os.path.basename(bamfile)}: {ttl['total']} reads, "
+        sumstr += f"{ttl['skipped']} non-PE reads ({(ttl['skipped']/ttl['total'])*100:.2f}%), "
+        for i in cols_to_use:
+            sumstr += f"{ttl[i]} {i}-reads ({(ttl[i]/ttl['total'])*100:.2f}%), "
+        if umi_correct_params:
+            ttl_uses_U = 'U' in ttl.keys()
+            sumstr += f"{ttl['corrected']} counts from corrected UMIs "
+            sumstr += f"({(ttl['corrected']/ttl['U'])*100:.2f}%)" if ttl_uses_U \
+                        else f"({(ttl['corrected']/(ttl['UI'] + ttl['UE']))*100:.2f}%)"
+        print(sumstr)
+    else:
+        print(f"empty BAM file")
