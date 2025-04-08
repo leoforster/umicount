@@ -220,9 +220,8 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
         gcounts[g] = defaultdict(int)
 
     # read and UMI count tracking dicts
-    geneumis = {i:({'U':{}} if combine_unspliced else {'UE':{}, 'UI':{}}) \
-                for i in gcounts.keys() if not i.startswith('_')} 
-    totalumis = {i:0 for i in cols_to_use + ['total', 'skipped', 'corrected']} 
+    geneumis = {i:defaultdict(lambda: defaultdict(int)) for i in gattributes.keys()} 
+    totalumis = {i:0 for i in cols_to_use + ['total', 'uncounted', 'corrected']} 
 
     # iterate over reads and assign feature overlaps
     bam_reader = HTSeq.BAM_Reader(bamfile)
@@ -230,7 +229,7 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
         totalumis['total'] += 1
 
         if not bundle:
-            totalumis['skipped'] += 1
+            totalumis['uncounted'] += 1
             continue
 
         readpair = extract_first_alignment(bundle)
@@ -242,25 +241,24 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
         if readpair.can_do_overlap(): readpair.evaluate_overlap(eattributes)
 
         # now count read at appropriate category based on overlap
-        if readpair.gene_to_count == "": # no gene overlap
-            gcounts[readpair.category]['UE' if readpair.umi else 'RE'] += 1 
+        rkey = 'U' if readpair.umi else 'R'
+        if readpair.gene_to_count == '': # no gene overlap
+            gcounts[readpair.category][rkey + 'E' if not combine_unspliced else ''] += 1
+            totalumis['uncounted'] += 1 # later check only cols_to_use
+        else:
+            if not combine_unspliced:
+                rkey += 'I' if readpair.exon_to_count == '' else 'E'
 
-        else: # have gene-counts
-            if readpair.umi:
-                rkey = 'U' if combine_unspliced else \
-                       ('UI' if readpair.exon_to_count == "" else 'UE')
-                rgene = readpair.gene_to_count
-                rumi = readpair.umi
-                geneumis[rgene][rkey][rumi] = geneumis[rgene][rkey].get(rumi, 0) + 1
-
+            rgene = readpair.gene_to_count
+            if readpair.umi: # store gene UMIs separately for deduplication/correction
+                geneumis[rgene][rkey][readpair.umi] += 1
             else:
-                rkey = 'RI' if readpair.exon_to_count == "" else 'RE'
                 gcounts[readpair.gene_to_count][rkey] += 1
 
     # parsed all reads into gene overlaps, now process UMI counts
     if umi_correct_params is None: # no UMI correction
-        for g in geneumis.keys():
-            if combine_unspliced:
+        if combine_unspliced:
+            for g in geneumis.keys():
                 umisum = sum(geneumis[g]['U'].values())
                 umilen = len(geneumis[g]['U'])
 
@@ -269,7 +267,8 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                     gcounts[g]['D'] = umisum - umilen
                 else:
                     gcounts[g]['U'] = umisum
-            else: 
+        else: 
+            for g in geneumis.keys():
                 for uie in ['UI', 'UE']:
                     umisum = sum(geneumis[g][uie].values())
                     umilen = len(geneumis[g][uie])
@@ -354,6 +353,7 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
 
     # load or parse the GTF data
     gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None)
+    print(gtf_data)
     gfeatures, efeatures, gattributes, eattributes = gtf_data
 
     # parsing BAM and count reads
@@ -365,7 +365,7 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
 
     if sum(ttl.values()) > 0:
         sumstr = f"{os.path.basename(bamfile)}: {ttl['total']} reads, "
-        sumstr += f"{ttl['skipped']} non-PE reads ({(ttl['skipped']/ttl['total'])*100:.2f}%), "
+        sumstr += f"{ttl['uncounted']} uncounted reads ({(ttl['uncounted']/ttl['total'])*100:.2f}%), "
         for i in cols_to_use:
             sumstr += f"{ttl[i]} {i}-reads ({(ttl[i]/ttl['total'])*100:.2f}%), "
         if umi_correct_params: sumstr += f"{ttl['corrected']} counts in corrected UMIs "

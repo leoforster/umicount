@@ -93,11 +93,11 @@ def umicount():
         print('no input files found, skipping input only valid with --gtf and --GTF_dump')
         sys.exit()
 
-    basecols = ['RE', 'RI']
+    basecols = []
     if r.combine_unspliced:
-        basecols += ['U']
+        basecols += ['U', 'R']
     else:
-        basecols += ['UE', 'UI']
+        basecols += ['UE', 'UI', 'RE', 'RI']
     if r.no_dedup == False:
         basecols += ['D']
 
