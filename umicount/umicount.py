@@ -20,8 +20,13 @@ def validate_cols_to_use(cols):
         print('malformed columns contains invalid values (expected %s)' %valid_fields)
         return False
 
-    if 'RE' not in cols and 'RI' not in cols:
-        print('malformed columns supplied, need at least RE, RI and (U or UE, UI')
+    has_RIE = 'RI' in cols or 'RE' in cols
+    has_R = 'R' in cols
+    if has_RIE and has_R:
+        print('malformed columns contains (RE, RI) and R')
+        return False
+    if has_RIE and not ('RI' in cols and 'RE' in cols):
+        print('malformed columns contains RE or RI but not both')
         return False
 
     has_UIE = 'UI' in cols or 'UE' in cols
@@ -351,7 +356,6 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
 
     # load or parse the GTF data
     gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None)
-    print(gtf_data)
     gfeatures, efeatures, gattributes, eattributes = gtf_data
 
     # parsing BAM and count reads
