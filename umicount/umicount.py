@@ -296,7 +296,7 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
 
                 # track sum of counts of corrected UMIs
                 totalumis['corrected'] += sum([UIE_corrected[i] for i in geneumis[g]['U'] \
-                                               if i in UIE_corrected.keys()])
+                                               if i not in UIE_corrected.keys()])
 
                 if do_dedup:
                     gcounts[g]['U'] = len(UIE_corrected.keys()) # unique UMIs
@@ -315,9 +315,9 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
 
                 # track sum of counts of corrected UMIs
                 totalumis['corrected'] += sum([UI_corrected[i] for i in geneumis[g]['UI'] \
-                                               if i in UI_corrected.keys()])
+                                               if i not in UI_corrected.keys()])
                 totalumis['corrected'] += sum([UE_corrected[i] for i in geneumis[g]['UE'] \
-                                               if i in UE_corrected.keys()])
+                                               if i not in UE_corrected.keys()])
 
                 if do_dedup:
                     gcounts[g]['UI'] = len(UI_corrected.keys())
@@ -366,11 +366,11 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
     write_counts(outfile, bamfile, umicount, gattributes, cols_to_use)
 
     if sum(ttl.values()) > 0:
-        sumstr = f"{os.path.basename(bamfile)}: {ttl['total']} reads, "
-        sumstr += f"{ttl['uncounted']} uncounted reads ({(ttl['uncounted']/ttl['total'])*100:.2f}%), "
+        sumstr = f"{os.path.basename(bamfile)}: {ttl['total']} reads"
+        sumstr += f", {ttl['uncounted']} uncounted reads ({(ttl['uncounted']/ttl['total'])*100:.2f}%)"
         for i in cols_to_use:
-            sumstr += f"{ttl[i]} {i}-reads ({(ttl[i]/ttl['total'])*100:.2f}%), "
-        if umi_correct_params: sumstr += f"{ttl['corrected']} counts in corrected UMIs "
+            sumstr += f", {ttl[i]} {i}-reads ({(ttl[i]/ttl['total'])*100:.2f}%)"
+        if umi_correct_params: sumstr += f", {ttl['corrected']} counts in corrected UMIs "
         print(sumstr)
     else:
         print(f"empty BAM file")
