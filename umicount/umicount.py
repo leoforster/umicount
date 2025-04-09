@@ -248,7 +248,7 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
         # now count read at appropriate category based on overlap
         rkey = 'U' if readpair.umi else 'R'
         if readpair.gene_to_count == '': # no gene overlap
-            gcounts[readpair.category][rkey + 'E' if not combine_unspliced else ''] += 1
+            gcounts[readpair.category][(rkey + 'E') if not combine_unspliced else rkey] += 1
             totalumis['uncounted'] += 1
 
         else: # has gene overlap
@@ -285,17 +285,15 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                                       sum(geneumis[g]['UE'].values()) - gcounts[g]['UE']
 
     else: # with UMI correction
-        countratio_threshold = umi_correct_params['countratio_threshold']
-        hamming_threshold = umi_correct_params['hamming_threshold']
+        ct = umi_correct_params['countratio_threshold']
+        ht = umi_correct_params['hamming_threshold']
         
         if combine_unspliced:
             for g in geneumis.keys():
-                UIE_corrected = umi_correction(geneumis[g]['U'], 
-                                               countratio=countratio_threshold, 
-                                               hamming_threshold=hamming_threshold)
+                UIE_corrected = umi_correction(geneumis[g]['U'], countratio=ct, hamming_threshold=ht)
 
                 # track sum of counts of corrected UMIs
-                totalumis['corrected'] += sum([UIE_corrected[i] for i in geneumis[g]['U'] \
+                totalumis['corrected'] += sum([geneumis[g]['U'][i] for i in geneumis[g]['U'] \
                                                if i not in UIE_corrected.keys()])
 
                 if do_dedup:
@@ -306,17 +304,13 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
 
         else:
             for g in geneumis.keys():
-                UI_corrected = umi_correction(geneumis[g]['UI'], 
-                                              countratio=countratio_threshold, 
-                                              hamming_threshold=hamming_threshold)
-                UE_corrected = umi_correction(geneumis[g]['UE'], 
-                                              countratio=countratio_threshold, 
-                                              hamming_threshold=hamming_threshold)
+                UI_corrected = umi_correction(geneumis[g]['UI'], countratio=ct, hamming_threshold=ht)
+                UE_corrected = umi_correction(geneumis[g]['UE'], countratio=ct, hamming_threshold=ht)
 
                 # track sum of counts of corrected UMIs
-                totalumis['corrected'] += sum([UI_corrected[i] for i in geneumis[g]['UI'] \
+                totalumis['corrected'] += sum([geneumis[g]['UI'][i] for i in geneumis[g]['UI'] \
                                                if i not in UI_corrected.keys()])
-                totalumis['corrected'] += sum([UE_corrected[i] for i in geneumis[g]['UE'] \
+                totalumis['corrected'] += sum([geneumis[g]['UE'][i] for i in geneumis[g]['UE'] \
                                                if i not in UE_corrected.keys()])
 
                 if do_dedup:
@@ -329,7 +323,7 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
                     gcounts[g]['UE'] = sum(UE_corrected.values())
 
     # update total counts
-    for g in gcounts.keys():
+    for g in gattributes.keys():
         for i in cols_to_use:
             totalumis[i] += gcounts[g][i]
 
@@ -363,8 +357,10 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
                                         cols_to_use=cols_to_use, 
                                         umi_correct_params=umi_correct_params)
 
+    # output counts table to file
     write_counts(outfile, bamfile, umicount, gattributes, cols_to_use)
 
+    # print summarized quantities of counted read categories
     if sum(ttl.values()) > 0:
         sumstr = f"{os.path.basename(bamfile)}: {ttl['total']} reads"
         sumstr += f", {ttl['uncounted']} uncounted reads ({(ttl['uncounted']/ttl['total'])*100:.2f}%)"
