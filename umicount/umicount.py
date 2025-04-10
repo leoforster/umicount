@@ -1,8 +1,8 @@
 import sys
 import os
-import multiprocessing as mp
-from collections import defaultdict
 import pickle
+from multiprocessing import Pool
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Tuple, List
 
@@ -343,13 +343,13 @@ def write_counts(outfile, bamfile, gene_counts, gattributes, cols_to_use):
                 line_fields.append(str(gene_counts[gene][b]))
             out.write('\t'.join(line_fields) + '\n')
 
-def process_bam(bamfile, gtffile, outfile, skipgtf=None, 
-                cols_to_use=None, umi_correct_params=None):
+def process_bam(bamfile, outfile, gtf_data,
+                cols_to_use=None, 
+                umi_correct_params=None):
 
     assert validate_cols_to_use(cols_to_use)
 
-    # load or parse the GTF data
-    gtf_data = load_gtf_data(gtffile, skipgtf=skipgtf, dumpgtf=None)
+    # assign GTF data
     gfeatures, efeatures, gattributes, eattributes = gtf_data
 
     # parsing BAM and count reads
@@ -370,3 +370,23 @@ def process_bam(bamfile, gtffile, outfile, skipgtf=None,
         print(sumstr)
     else:
         print(f"empty BAM file")
+
+def process_bam_parallel(filepairs, gtf_data, num_workers=4,
+                         cols_to_use=None, 
+                         umi_correct_params=None):
+
+    # wrapper around process_bam to handle multiple BAM files in parallel
+    # filepairs are a list of tasks as tuples of ( bamfile, outfile )
+    # gtf_data can be parsed from GTF file using load_gtf_data(gtffile)
+
+    def worker(task):
+        bamfile, outfile = task
+        process_bam(bamfile, outfile, gtf_data,
+                    cols_to_use=cols_to_use, 
+                    umi_correct_params=umi_correct_params)
+        # needs a return?
+
+    # map the worker over the filepairs
+    with Pool(num_workers) as pool:
+        results = pool.map(worker, filepairs)
+    

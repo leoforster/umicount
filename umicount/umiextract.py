@@ -3,6 +3,7 @@ import os
 import re
 import gzip
 import HTSeq as htseq
+from multiprocessing import Pool
 from contextlib import nullcontext
 
 def slice_SequenceWithQualities(swq, start=None):
@@ -107,18 +108,11 @@ def process_fastq(paths, outnames, umi_len,
     reads_written = 0
     readnames = set()
 
-    if fuzzy_umi_params:
-        try:
-            import regex
-        except ModuleNotFoundError:
-            print('requires regex package to enable fuzzy_umi_extraction')
-            sys.exit()
-
     pattern = precompile_regex(umi_len, anchor_seq, trailing_seq, fuzzy_umi_params)
 
     # prepare output files
-    r1_out = gzip.open(r1_out_path, 'wb')
-    r2_out = gzip.open(r2_out_path, 'wb') if r2_path and r2_out_path else None
+    r1_out = gzip.open(r1_out_path, 'wb', compresslevel=6) # matches bash gzip
+    r2_out = gzip.open(r2_out_path, 'wb', compresslevel=6) if r2_path and r2_out_path else None
 
     # setup fastq readers: if not using R2 we set it to a null generator
     r1_reader = htseq.FastqReader(r1_path)
@@ -133,8 +127,7 @@ def process_fastq(paths, outnames, umi_len,
 
             # check for duplicated R1 readname, R2 is checked for consistency below
             if entry1.name in readnames:
-                print('duplicate R1 name found at read number %s' %readcount)
-                sys.exit()
+                sys.exit('duplicate R1 name found at read number %s' %readcount)
             else:
                 readnames.add(entry1.name)
 
@@ -154,8 +147,7 @@ def process_fastq(paths, outnames, umi_len,
             if entry2 is not None:
                 entry2.name, _, _ = entry2.name.partition(' ')
                 if entry1.name != entry2.name:
-                    print('readname mismatch in R1 and R2 at read number %s' %readcount)
-                    sys.exit()
+                    sys.exit('readname mismatch in R1 and R2 at read number %s' %readcount)
                 if umi:
                     entry2.name += '_' + umi
 
@@ -171,7 +163,8 @@ def process_fastq(paths, outnames, umi_len,
                 reads_written += 1
 
     if readcount > 0:
-        print( (f"{readcount} reads: {umicount} with UMI ({(umicount/readcount)*100:.2f}%), "
+        print( (f"{os.path.basename(paths[0])}: {readcount} reads, " 
+                f"{umicount} with UMI ({(umicount/readcount)*100:.2f}%), "
                 f"{reads_written} written "
                 f"({((readcount-reads_written)/readcount)*100:.2f}% skipped)") )
     else:
@@ -180,3 +173,30 @@ def process_fastq(paths, outnames, umi_len,
     r1_out.close()
     if r2_out:
         r2_out.close()
+
+def process_fastq_parallel(filepairs, umi_len, num_workers=4,
+                           only_umi=False, 
+                           anchor_seq='ATTGCGCAATG', 
+                           trailing_seq='GGG',
+                           search_region=-1,
+                           min_remaining_seqlen=-1,
+                           fuzzy_umi_params=None):
+
+    # wrapper around process_fastq to handle multiple FASTQ files in parallel
+    # filepairs are a list of tasks as tuples of ( (r1_path, r2_path), (r1_out, r2_out) )
+
+    def worker(task):
+        paths, outnames = task
+        process_fastq(paths, outnames, umi_len,
+                      only_umi=only_umi,
+                      anchor_seq=anchor_seq,
+                      trailing_seq=trailing_seq,
+                      search_region=search_region,
+                      min_remaining_seqlen=min_remaining_seqlen,
+                      fuzzy_umi_params=fuzzy_umi_params)
+        # needs a return?
+
+    # map the worker over the filepairs
+    with Pool(num_workers) as pool:
+        results = pool.map(worker, filepairs)
+    
