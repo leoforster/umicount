@@ -174,10 +174,10 @@ def process_fastq(paths, outnames, umi_len,
     if r2_out:
         r2_out.close()
 
-# worker function for multiprocessing
 def _fastq_worker(task_args):
+    # worker function for multiprocessing
     infile, outfile, kwargs = task_args
-    process_fastq(paths, outnames, **kwargs)
+    process_fastq(infile, outfile, **kwargs)
 
 def process_fastq_parallel(filepairs, umi_len, num_workers=4,
                            only_umi=False, 

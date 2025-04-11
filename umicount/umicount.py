@@ -376,9 +376,8 @@ def process_bam(bamfile, outfile, gtf_data,
 
 def _bam_worker(task_args):
     # worker function for multiprocessing
-    
-    infile, outfile, kwargs = task_args
-    process_fastq(paths, outnames, **kwargs)
+    infile, outfile, gtf_data, kwargs = task_args
+    process_bam(infile, outfile, gtf_data, **kwargs)
 
 def process_bam_parallel(filepairs, gtf_data, num_workers=4,
                          cols_to_use=None, 
@@ -395,6 +394,6 @@ def process_bam_parallel(filepairs, gtf_data, num_workers=4,
     )
 
     # map the worker over the filepairs
-    tasks = [(infile, outfile, kwargs) for (infile, outfile) in filepairs]
+    tasks = [(infile, outfile, gtf_data, kwargs) for (infile, outfile) in filepairs]
     with Pool(num_workers) as pool:
         results = pool.map(_bam_worker, tasks)
