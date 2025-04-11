@@ -5,7 +5,7 @@ import sys
 import os
 
 from .umiextract import process_fastq_parallel
-from .umicount import process_bam, load_gtf_data
+from .umicount import process_bam_parallel, load_gtf_data
 
 def existing_file(path):
     if not os.path.isfile(path):
@@ -25,7 +25,7 @@ def umiextract():
     parser.add_argument("-2", "--read2", action="store", nargs="*", 
                         required=False, default=None, type=existing_file,
                         help="Input smartseq3 read2 fastq")
-    parser.add_argument("-d", "--output_dir" action="store", type=existing_dir, default=os.getcwd(),
+    parser.add_argument("-d", "--output_dir", action="store", type=existing_dir, default=os.getcwd(),
                         help="Directory to output processed fastq files")
     parser.add_argument("-c", "--cores" action="store", type=int,
                         help="Number of cores for processing R1/R2: each core processes 1 sample")
@@ -68,7 +68,7 @@ def umiextract():
         except ModuleNotFoundError:
             sys.exit('requires regex package to enable fuzzy_umi_extraction')
 
-    # collate R1-R2 pairs of threading
+    # collate R1-R2 pairs for threading
     filepairs = []
     filedir = os.path.abspath(os.path.expanduser(r.output_dir))
 
@@ -103,7 +103,10 @@ def umicount():
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("-f", "--bams", type=existing_file, nargs="+",
                         help="input bamfiles from modified fastqs, sorted by read")
-    parser.add_argument("-d", "--output_dir", type=existing_dir, help="Path to output counts matrix")
+    parser.add_argument("-d", "--output_dir", type=existing_dir, default=os.getcwd(), 
+                        help="Path to output counts matrix")
+    parser.add_argument("-c", "--cores" action="store", type=int,
+                        help="Number of cores for processing BAMs: each core processes 1 sample")
     parser.add_argument("-g", "--gtf", type=existing_file, help="input GTF file (ensembl format)")
     parser.add_argument("--GTF_dump", type=existing_dir, default=None, help="File path to dump parsed GTF data")
     parser.add_argument("--GTF_skip_parse", type=existing_file, default=None, help="Path to dumped GTF data")
@@ -111,7 +114,7 @@ def umicount():
                         help="dont deduplicate UMI counts")
     parser.add_argument("--combine_unspliced", action="store_true", default=False,
                         help="dont distinguish spliced and unspliced UMI counts, instead as U")
-    parser.add_argument("-c", "--UMI_correct", action="store_true", default=False, 
+    parser.add_argument("-u", "--UMI_correct", action="store_true", default=False, 
                         help=( "Enable gene-wise UMI correction by hamming distance " 
                                "requires python RapidFuzz library to be installed") )
     parser.add_argument("--hamming_threshold", action="store", type=int, default=1,
@@ -160,7 +163,8 @@ def umicount():
         filepairs.append( (bamfile, os.path.join(filedir, f"{base}.umicounts")) )
 
     # run umicount on BAMs split by thread
-    gtf_data = load_gtf_data(gtffile, skipgtf=r.GTF_skip_parse) # only need to load once
-    process_bam(filepairs, gtf_data
-                cols_to_use=basecols, 
-                umi_correct_params=umi_correct_params)
+    if len(filepairs) > 0:
+        gtf_data = load_gtf_data(gtffile, skipgtf=r.GTF_skip_parse) # only need to load once
+        process_bam_parallel(filepairs, gtf_data, num_workers=r.cores,
+                             cols_to_use=basecols, 
+                             umi_correct_params=umi_correct_params)

@@ -7,7 +7,10 @@ from dataclasses import dataclass, field
 from typing import Any, Tuple, List
 
 import HTSeq
-from rapidfuzz.distance import Hamming
+try:
+    from rapidfuzz.distance import Hamming
+except: # this is checked in cli.py
+    pass
 
 def validate_cols_to_use(cols):
     # because cols_to_use values direct downstream logic inplace of function args
