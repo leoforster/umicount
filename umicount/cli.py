@@ -27,7 +27,7 @@ def umiextract():
                         help="Input smartseq3 read2 fastq")
     parser.add_argument("-d", "--output_dir", action="store", type=existing_dir, default=os.getcwd(),
                         help="Directory to output processed fastq files")
-    parser.add_argument("-c", "--cores" action="store", type=int,
+    parser.add_argument("-c", "--cores", action="store", type=int,
                         help="Number of cores for processing R1/R2: each core processes 1 sample")
     parser.add_argument("--umilen", action="store", type=int, default=8,
                         help="UMI length in bp")
@@ -87,7 +87,7 @@ def umiextract():
         r1_out = prepend_output(read1, filedir)
         r2_out = prepend_output(read2, filedir) if read2 else None
         
-        filepairs.append( ((r1_file, r2_file), (r1_out, r2_out)) )
+        filepairs.append( ((read1, read2), (r1_out, r2_out)) )
 
     # run umiextract over parallel process_fastq wrapper
     if len(filepairs) > 0:
@@ -97,7 +97,7 @@ def umiextract():
                                trailing_seq=r.trailing,
                                search_region=r.search_region,
                                min_remaining_seqlen=r.min_seqlen,
-                               fuzzy_umi_params=fuzzy_umi_params):
+                               fuzzy_umi_params=fuzzy_umi_params)
 
 def umicount():
     parser = argparse.ArgumentParser(description="")
@@ -105,7 +105,7 @@ def umicount():
                         help="input bamfiles from modified fastqs, sorted by read")
     parser.add_argument("-d", "--output_dir", type=existing_dir, default=os.getcwd(), 
                         help="Path to output counts matrix")
-    parser.add_argument("-c", "--cores" action="store", type=int,
+    parser.add_argument("-c", "--cores", action="store", type=int,
                         help="Number of cores for processing BAMs: each core processes 1 sample")
     parser.add_argument("-g", "--gtf", type=existing_file, help="input GTF file (ensembl format)")
     parser.add_argument("--GTF_dump", type=existing_dir, default=None, help="File path to dump parsed GTF data")

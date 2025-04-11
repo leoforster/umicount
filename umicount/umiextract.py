@@ -174,6 +174,11 @@ def process_fastq(paths, outnames, umi_len,
     if r2_out:
         r2_out.close()
 
+# worker function for multiprocessing
+def _fastq_worker(task_args):
+    infile, outfile, kwargs = task_args
+    process_fastq(paths, outnames, **kwargs)
+
 def process_fastq_parallel(filepairs, umi_len, num_workers=4,
                            only_umi=False, 
                            anchor_seq='ATTGCGCAATG', 
@@ -185,18 +190,19 @@ def process_fastq_parallel(filepairs, umi_len, num_workers=4,
     # wrapper around process_fastq to handle multiple FASTQ files in parallel
     # filepairs are a list of tasks as tuples of ( (r1_path, r2_path), (r1_out, r2_out) )
 
-    def worker(task):
-        paths, outnames = task
-        process_fastq(paths, outnames, umi_len,
-                      only_umi=only_umi,
-                      anchor_seq=anchor_seq,
-                      trailing_seq=trailing_seq,
-                      search_region=search_region,
-                      min_remaining_seqlen=min_remaining_seqlen,
-                      fuzzy_umi_params=fuzzy_umi_params)
-        # needs a return?
+    # bundle constant args
+    kwargs = dict(
+        umi_len=umi_len,
+        only_umi=only_umi,
+        anchor_seq=anchor_seq,
+        trailing_seq=trailing_seq,
+        search_region=search_region,
+        min_remaining_seqlen=min_remaining_seqlen,
+        fuzzy_umi_params=fuzzy_umi_params
+    )
 
     # map the worker over the filepairs
+    tasks = [(infile, outfile, kwargs) for (infile, outfile) in filepairs]
     with Pool(num_workers) as pool:
-        results = pool.map(worker, filepairs)
+        results = pool.map(_fastq_worker, tasks)
     

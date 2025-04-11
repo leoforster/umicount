@@ -374,6 +374,12 @@ def process_bam(bamfile, outfile, gtf_data,
     else:
         print(f"empty BAM file")
 
+def _bam_worker(task_args):
+    # worker function for multiprocessing
+    
+    infile, outfile, kwargs = task_args
+    process_fastq(paths, outnames, **kwargs)
+
 def process_bam_parallel(filepairs, gtf_data, num_workers=4,
                          cols_to_use=None, 
                          umi_correct_params=None):
@@ -382,14 +388,13 @@ def process_bam_parallel(filepairs, gtf_data, num_workers=4,
     # filepairs are a list of tasks as tuples of ( bamfile, outfile )
     # gtf_data can be parsed from GTF file using load_gtf_data(gtffile)
 
-    def worker(task):
-        bamfile, outfile = task
-        process_bam(bamfile, outfile, gtf_data,
-                    cols_to_use=cols_to_use, 
-                    umi_correct_params=umi_correct_params)
-        # needs a return?
+    # bundle constant args
+    kwargs = dict(
+        cols_to_use=cols_to_use,
+        umi_correct_params=umi_correct_params
+    )
 
     # map the worker over the filepairs
+    tasks = [(infile, outfile, kwargs) for (infile, outfile) in filepairs]
     with Pool(num_workers) as pool:
-        results = pool.map(worker, filepairs)
-    
+        results = pool.map(_bam_worker, tasks)
