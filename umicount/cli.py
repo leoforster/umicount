@@ -104,7 +104,7 @@ def umicount():
     parser.add_argument("-f", "--bams", type=existing_file, nargs="+",
                         help="input bamfiles from modified fastqs, sorted by read")
     parser.add_argument("-d", "--output_dir", type=existing_dir, default=os.getcwd(), 
-                        help="Path to output counts matrix")
+                        help="Directory to output counts matrices")
     parser.add_argument("-c", "--cores", action="store", type=int,
                         help="Number of cores for processing BAMs: each core processes 1 sample")
     parser.add_argument("-g", "--gtf", type=existing_file, help="input GTF file (ensembl format)")
@@ -120,8 +120,8 @@ def umicount():
     parser.add_argument("--hamming_threshold", action="store", type=int, default=1,
                         help="Hamming distance threshold for merging similar UMIs, usually 1")
     parser.add_argument("--count_ratio_threshold", action="store", type=int, default=2,
-                        help=("Threshold where UMIs are only merged if one has more "
-                              "counts by a factor of (threshold*counts)-1"))
+                        help=("Threshold where UMIs are only merged if one has "
+                              "at least (threshold*counts)-1 as many counts as the other"))
     
     r = parser.parse_args()
 
@@ -164,7 +164,7 @@ def umicount():
 
     # run umicount on BAMs split by thread
     if len(filepairs) > 0:
-        gtf_data = load_gtf_data(gtffile, skipgtf=r.GTF_skip_parse) # only need to load once
+        gtf_data = load_gtf_data(r.gtf, skipgtf=r.GTF_skip_parse) # only need to load once
         process_bam_parallel(filepairs, gtf_data, num_workers=r.cores,
                              cols_to_use=basecols, 
                              umi_correct_params=umi_correct_params)
