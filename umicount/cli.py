@@ -69,8 +69,9 @@ def umiextract():
             sys.exit('requires regex package to enable fuzzy_umi_extraction')
 
     # collate R1-R2 pairs for threading
-    filepairs = []
     filedir = os.path.abspath(os.path.expanduser(r.output_dir))
+    readpairs = [(r.read1[n], r.read2[n] if r.read2 else None) for n in range(len(r.read1))]
+    readpairs = sorted(readpairs, key=lambda i: os.path.getsize(i[0]), reverse=True) # large files first
 
     def prepend_output(filename, filedir):
         filename = os.path.basename(filename)
@@ -80,8 +81,8 @@ def umiextract():
         fout = f"{fbase}_umiextract.fastq.gz"
         return os.path.join(filedir, fout)
 
-    for n, read1 in enumerate(r.read1):
-        read2 = r.read2[n] if r.read2 else None
+    filepairs = [] # store input + output files
+    for read1, read2 in readpairs:
 
         # prepend umiextract before extension on output filenames
         r1_out = prepend_output(read1, filedir)
@@ -158,7 +159,8 @@ def umicount():
     # collate input and output files in filepairs
     filepairs = []
     filedir = os.path.abspath(os.path.expanduser(r.output_dir))
-    for n, bamfile in enumerate(r.bams):
+
+    for bamfile in sorted(r.bams, key=lambda i: os.path.getsize(i), reverse=True):
         base, ext = os.path.splitext(bamfile)
         filepairs.append( (bamfile, os.path.join(filedir, f"{base}.umicounts")) )
 
