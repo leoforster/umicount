@@ -170,19 +170,54 @@ class ReadTrack:
 
         return self
 
-def extract_first_alignment(bundle):
-    firstpair = bundle[0] # consider first reported alignment by default
-    if None in firstpair:
-        return ReadTrack(read1_almnt=[i for i in firstpair if i][0],
-                         read2_almnt=None,
-                         category='_unmapped')
+def extract_first_alignment(bundle, count_primary=False):
 
-    if not (firstpair[0].aligned and firstpair[1].aligned):
-        return ReadTrack(read1_almnt=firstpair[0],
-                         read2_almnt=None,
-                         category='_unmapped')
+    if not bundle: raise ValueError("empty bundle: no alignments to extract")
 
-    return ReadTrack(read1_almnt=firstpair[0], read2_almnt=firstpair[1])
+    r1_to_count = r2_to_count = None
+    read_category = '' # default value as in ReadTrack definition
+
+    # multimapping readpair
+    if len(bundle) > 1: 
+
+        if count_primary:
+            primaries = []
+            for r1, r2 in bundle:
+                p1 = r1 if (r1 and r1.not_primary_alignment is False) else None
+                p2 = r2 if (r2 and r2.not_primary_alignment is False) else None
+                if p1 or p2: # at least one of r1/r2 has primary flag
+                    primaries.append((p1, p2))
+
+            if len(primaries) > 1:
+                raise ValueError("found multiple primary alignments:\n%s" %bundle)
+
+            if not primaries: # no primary alignments (or not set by aligner)
+                # TODO: warn user?
+                r1_to_count, r2_to_count = bundle[0] # default to first
+                read_category = '_multimapping'
+            else:
+                r1_to_count, r2_to_count = primaries[0]
+                read_category = ''
+
+        else: # multimapping but no count_primary: use first pair
+            r1_to_count, r2_to_count = bundle[0]
+            read_category = '_multimapping'
+
+    # readpair has single alignment
+    else:
+        r1, r2 = bundle[0]
+        r1_is_mapped = bool(r1 and r1.aligned)
+        r2_is_mapped = bool(r2 and r2.aligned)
+
+        if not (r1_is_mapped and r2_is_mapped):
+            read_category = '_unmapped'
+
+        r1_to_count = r1
+        r2_to_count = r2
+
+    return ReadTrack(read1_almnt=r1_to_count,
+                     read2_almnt=r2_to_count,
+                     category=read_category)
 
 def umi_correction(umicounts, countratio=2, hamming_threshold=1):
         
@@ -214,7 +249,10 @@ def umi_correction(umicounts, countratio=2, hamming_threshold=1):
 
     return corrected
             
-def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=None):
+def parse_bam_and_count(bamfile, gtf_data, 
+                        cols_to_use=None, 
+                        count_primary=False,
+                        umi_correct_params=None):
 
     assert validate_cols_to_use(cols_to_use)
     combine_unspliced = 'U' in cols_to_use
@@ -240,9 +278,7 @@ def parse_bam_and_count(bamfile, gtf_data, cols_to_use=None, umi_correct_params=
             totalumis['uncounted'] += 1
             continue
 
-        readpair = extract_first_alignment(bundle)
-        if len(bundle) > 1:
-            readpair.category = '_multimapping'
+        readpair = extract_first_alignment(bundle, count_primary=count_primary)
 
         # extract overlapping genes, exons
         if readpair.can_do_overlap(): readpair.find_overlap(gfeatures, efeatures)
@@ -348,6 +384,7 @@ def write_counts(outfile, bamfile, gene_counts, gattributes, cols_to_use):
 
 def process_bam(bamfile, outfile, gtf_data,
                 cols_to_use=None, 
+                count_primary=False,
                 umi_correct_params=None):
 
     assert validate_cols_to_use(cols_to_use)
@@ -358,6 +395,7 @@ def process_bam(bamfile, outfile, gtf_data,
     # parsing BAM and count reads
     umicount, ttl = parse_bam_and_count(bamfile, gtf_data, 
                                         cols_to_use=cols_to_use, 
+                                        count_primary=count_primary,
                                         umi_correct_params=umi_correct_params)
 
     # output counts table to file
@@ -381,6 +419,7 @@ def _bam_worker(task_args):
 
 def process_bam_parallel(filepairs, gtf_data, num_workers=4,
                          cols_to_use=None, 
+                         count_primary=False,
                          umi_correct_params=None):
 
     # wrapper around process_bam to handle multiple BAM files in parallel
@@ -390,6 +429,7 @@ def process_bam_parallel(filepairs, gtf_data, num_workers=4,
     # bundle constant args
     kwargs = dict(
         cols_to_use=cols_to_use,
+        count_primary=count_primary,
         umi_correct_params=umi_correct_params
     )
 

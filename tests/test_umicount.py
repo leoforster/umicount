@@ -18,11 +18,12 @@ class DummyAlignment:
     A dummy alignment object to simulate an HTSeq alignment.
     The read name encodes the UMI (if an underscore exists).
     """
-    def __init__(self, name, aligned=True, iv=None):
+    def __init__(self, name, aligned=True, not_primary_alignment=False, iv=None):
         DummyRead = type("DummyRead", (), {})  # create an empty dummy class
         self.read = DummyRead()
         self.read.name = name
         self.aligned = aligned
+        self.not_primary_alignment = not_primary_alignment
         self.iv = iv
 
 def dummy_pair_SAM_alignments_factory(bundles):
@@ -54,12 +55,12 @@ def get_dummy_gtf_dump(genes_intervals, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'
             eattributes[exon_id] = [gene_id, gene_name, "1"]
     return (gfeatures, efeatures, gattributes, eattributes)
 
-def create_readtrack(name, iv, aligned=True):
+def create_readtrack(name, iv, aligned=True, not_primary_alignment=False):
     """
     Helper to create a ReadTrack from two dummy alignments.
     """
-    aln1 = DummyAlignment(name, aligned, iv)
-    aln2 = DummyAlignment(name, aligned, iv)
+    aln1 = DummyAlignment(name, aligned, not_primary_alignment, iv)
+    aln2 = DummyAlignment(name, aligned, not_primary_alignment, iv)
     return ReadTrack(aln1, aln2)
 
 ############################
@@ -126,10 +127,47 @@ def test_extract_first_alignment():
 
     # Case 3: both alignments exist but one is not aligned.
     aln3 = DummyAlignment("readD_UMI", aligned=False, iv=iv)
-    bundle_unmapped2 = [(aln3, aln2)]
+    bundle_unmapped2 = [(aln2, aln3)]
     rt3 = extract_first_alignment(bundle_unmapped2)
     assert rt3.category == "_unmapped"
-    assert rt3.read2_almnt is None
+
+    # Case 4: empty bundle
+    with pytest.raises(ValueError):
+        extract_first_alignment([])
+
+    # Case 5: multimapping but count_primary not set
+    aln4 = DummyAlignment("readE_UMI", True, True, iv)
+    aln5 = DummyAlignment("readE_UMI", True, True, iv)
+    aln6 = DummyAlignment("readF_UMI", True, True, iv)
+    aln7 = DummyAlignment("readF_UMI", True, True, iv)
+    bundle_multi = [(aln4, aln5), (aln6, aln7)]
+    rt5 = extract_first_alignment(bundle_multi, count_primary=False)
+    assert rt5.category == "_multimapping"
+    assert rt5.read1_almnt is aln4
+    assert rt5.read2_almnt is aln5
+
+    # Case 6: multimapping with no primary alignment
+    bundle_multi = [(aln4, aln5), (aln6, aln7)]
+    rt6 = extract_first_alignment(bundle_multi, count_primary=True)
+    assert rt6.category == "_multimapping"
+
+    # Case 7: multimapping reads with a primary alignment
+    aln4.not_primary_alignment = True
+    aln5.not_primary_alignment = True
+    aln6.not_primary_alignment = False # primary
+    aln7.not_primary_alignment = False # primary
+    bundle_multi = [(aln4, aln5), (aln6, aln7)]
+    rt7 = extract_first_alignment(bundle_multi, count_primary=True)
+    assert rt7.category == ""
+    assert rt7.read1_almnt is aln6
+    assert rt7.read2_almnt is aln7
+
+    # Case 8: multimapping with multiple primary alignments
+    aln4.not_primary_alignment = False
+    aln5.not_primary_alignment = False
+    bundle_multi = [(aln4, aln5), (aln6, aln7)]
+    with pytest.raises(ValueError):
+        extract_first_alignment(bundle_multi, count_primary=True)
 
 def test_read_at_exon_boundary():
     """
@@ -162,7 +200,7 @@ def test_read_wrong_strand():
     dummy_eattributes = {"exon1": ["gene1", "GeneName1", "1"]}
     
     # Create a read aligned on the minus strand.
-    aln = DummyAlignment("read_strand", True, HTSeq.GenomicInterval("chr1", 100, 200, "-"))
+    aln = DummyAlignment("read_strand", True, False, HTSeq.GenomicInterval("chr1", 100, 200, "-"))
     rt = ReadTrack(aln, aln)
     rt.find_overlap(gfeatures, efeatures)
     rt.evaluate_overlap(dummy_eattributes)
@@ -182,7 +220,7 @@ def test_umi_extraction_cases():
     
     iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
     for read_name, expected_umi in test_cases:
-        aln = DummyAlignment(read_name, True, iv)
+        aln = DummyAlignment(read_name, True, False, iv)
         rt = ReadTrack(aln, aln)
         assert rt.umi == expected_umi
 
@@ -201,7 +239,7 @@ def test_readtrack_can_do_overlap():
 
     # Now set one of the alignments to None.
     iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
-    aln1 = DummyAlignment("readA_UMI", aligned=True, iv=iv)
+    aln1 = DummyAlignment("readA_UMI", True, False, iv)
     rt = ReadTrack(aln1, None)
     assert rt.can_do_overlap() is False
 
@@ -306,41 +344,49 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     gtf_data = get_dummy_gtf_dump(genes_intervals)
     
     # Bundle 1: paired read with UMI "UMI1" overlapping gene1
-    bundle1 = [(DummyAlignment("read1_UMI1", True, ivgene), 
-                DummyAlignment("read1_UMI1", True, ivgene))]
+    bundle1 = [(DummyAlignment("read1_UMI1", True, False, ivgene), 
+                DummyAlignment("read1_UMI1", True, False, ivgene))]
 
     # Bundle 2: paired read without UMI overlapping exon1
-    bundle2 = [(DummyAlignment("read2", True, ivexon1), 
-                DummyAlignment("read2", True, ivexon1))]
+    bundle2 = [(DummyAlignment("read2", True, False, ivexon1), 
+                DummyAlignment("read2", True, False, ivexon1))]
 
     # Bundle 3: paired read without UMI overlapping gene1 intron
     ivintron = HTSeq.GenomicInterval("chr1", 220, 280, "+")
-    bundle3 = [(DummyAlignment("read3", True, ivintron), 
-                DummyAlignment("read3", True, ivintron))]
+    bundle3 = [(DummyAlignment("read3", True, False, ivintron), 
+                DummyAlignment("read3", True, False, ivintron))]
 
     # Bundle 4: unmapped (one alignment is None), with UMI
-    bundle4 = [(DummyAlignment("read4_UMI3", True, ivgene), None)]
+    bundle4 = [(DummyAlignment("read4_UMI3", True, False, ivgene), None)]
 
-    # Bundle 5: multimapping, without UMI
-    bundle5 = [(DummyAlignment("read5", True, ivexon1), 
-                DummyAlignment("read5", True, ivexon1)), 
-               (DummyAlignment("read5", True, ivexon2), 
-                DummyAlignment("read5", True, ivexon2))]
+    # Bundle 5: multimapping, without UMI, no primary alignment
+    bundle5 = [(DummyAlignment("read5", True, True, ivexon1), 
+                DummyAlignment("read5", True, True, ivexon1)), 
+               (DummyAlignment("read5", True, True, ivexon2), 
+                DummyAlignment("read5", True, True, ivexon2))]
 
     # Bundle 6: duplicate of Bundle 1 (same UMI "UMI1")
-    bundle6 = [(DummyAlignment("read1_UMI1", True, ivgene), 
-                DummyAlignment("read1_UMI1", True, ivgene))]
-    
-    bundles = [bundle1, bundle2, bundle3, bundle4, bundle5, bundle6]
+    bundle6 = [(DummyAlignment("read1_UMI1", True, False, ivgene), 
+                DummyAlignment("read1_UMI1", True, False, ivgene))]
+
+    # Bundle 7: multimapping with a primary alignment 
+    bundle7 = [(DummyAlignment("read6", True, False, ivexon1), # primary
+                DummyAlignment("read6", True, False, ivexon1)), # primary
+               (DummyAlignment("read6", True, True, ivexon2), 
+                DummyAlignment("read6", True, True, ivexon2))]
+
+    bundles = [bundle1, bundle2, bundle3, bundle4, bundle5, bundle6, bundle7]
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts, _ = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
+    counts, _ = parse_bam_and_count("dummy.bam", gtf_data, 
+                                    count_primary=True,
+                                    cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
     
     gene1_counts = counts["gene1"]
     assert gene1_counts["UE"] == 1 # from bundle1
     assert gene1_counts["D"] == 1 # from bundle6
-    assert gene1_counts["RE"] == 1 # from bundle2
+    assert gene1_counts["RE"] == 2 # from bundle2, bundle7
     assert gene1_counts["RI"] == 1 # from bundle3
 
     unmapped = counts["_unmapped"] # from bundle4
@@ -367,26 +413,26 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
     gtf_data = get_dummy_gtf_dump(genes_intervals)
     
     # Bundle 1: proper paired read with UMI "UMI1" overlapping gene1
-    bundle1 = [(DummyAlignment("read1_UMI1", True, ivgene1), 
-                DummyAlignment("read1_UMI1", True, ivgene1))]
+    bundle1 = [(DummyAlignment("read1_UMI1", True, False, ivgene1), 
+                DummyAlignment("read1_UMI1", True, False, ivgene1))]
 
     # Bundle 2: proper paired read with UMI "UMI2" overlapping gene2 which is intronic
-    bundle2 = [(DummyAlignment("read2_UMI2", True, ivgene2), 
-                DummyAlignment("read2_UMI2", True, ivgene2))]
+    bundle2 = [(DummyAlignment("read2_UMI2", True, False, ivgene2), 
+                DummyAlignment("read2_UMI2", True, False, ivgene2))]
 
     # Bundle 3: ambiguous read overlaps gene1 and gene2, but we count gene1 because has exon
     amb_iv = HTSeq.GenomicInterval("chr1", 170, 260, "+")
-    bundle3 = [(DummyAlignment("readAmb", True, amb_iv), 
-                DummyAlignment("readAmb", True, amb_iv))]
+    bundle3 = [(DummyAlignment("readAmb", True, False, amb_iv), 
+                DummyAlignment("readAmb", True, False, amb_iv))]
 
     # Bundle 4: duplicate of Bundle 1 for gene1
-    bundle4 = [(DummyAlignment("read1_UMI1", True, ivgene1), 
-                DummyAlignment("read1_UMI1", True, ivgene1))]
+    bundle4 = [(DummyAlignment("read1_UMI1", True, False, ivgene1), 
+                DummyAlignment("read1_UMI1", True, False, ivgene1))]
 
     # Bundle 5: read overlaps gene1 and gene2, but ambiguous because no exons
     amb_iv = HTSeq.GenomicInterval("chr1", 190, 260, "+")
-    bundle3 = [(DummyAlignment("readAmb", True, amb_iv), 
-                DummyAlignment("readAmb", True, amb_iv))]
+    bundle3 = [(DummyAlignment("readAmb", True, False, amb_iv), 
+                DummyAlignment("readAmb", True, False, amb_iv))]
     
     bundles = [bundle1, bundle2, bundle3, bundle4]
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
@@ -417,21 +463,21 @@ def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
     gtf_data = get_dummy_gtf_dump(genes_intervals)
     
     # Bundle 1: proper paired read with UMI to gene1
-    bundle1 = [(DummyAlignment("read1_UMI1", True, ivgene1), 
-                DummyAlignment("read1_UMI1", True, ivgene1))]
+    bundle1 = [(DummyAlignment("read1_UMI1", True, False, ivgene1), 
+                DummyAlignment("read1_UMI1", True, False, ivgene1))]
 
     # Bundle 2: proper paired read with same UMI as Bundle1, for gene2
-    bundle2 = [(DummyAlignment("read2_UMI1", True, ivgene2), 
-                DummyAlignment("read2_UMI1", True, ivgene2))]
+    bundle2 = [(DummyAlignment("read2_UMI1", True, False, ivgene2), 
+                DummyAlignment("read2_UMI1", True, False, ivgene2))]
 
     # Bundle 3: proper paired read with same UMI as Bundle1, but different position
     ivgene1_shift = HTSeq.GenomicInterval("chr1", 120, 220, "+")
-    bundle3 = [(DummyAlignment("read1_UMI1", True, ivgene1_shift), 
-                DummyAlignment("read1_UMI1", True, ivgene1_shift))]
+    bundle3 = [(DummyAlignment("read1_UMI1", True, False, ivgene1_shift), 
+                DummyAlignment("read1_UMI1", True, False, ivgene1_shift))]
 
     # Bundle 4: proper paired read with same base name as Bundle1 but different UMI
-    bundle4 = [(DummyAlignment("read1_UMI2", True, ivgene1), 
-                DummyAlignment("read1_UMI2", True, ivgene1))]
+    bundle4 = [(DummyAlignment("read1_UMI2", True, False, ivgene1), 
+                DummyAlignment("read1_UMI2", True, False, ivgene1))]
     
     bundles = [bundle1, bundle2, bundle3, bundle4]
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)

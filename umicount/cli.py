@@ -113,6 +113,9 @@ def umicount():
     parser.add_argument("--GTF_skip_parse", type=existing_file, default=None, help="Path to dumped GTF data")
     parser.add_argument("--no_dedup", action="store_true", default=False,
                         help="dont deduplicate UMI counts")
+    parser.add_argument("--mm_count_primary", action="store_true", default=False,
+                        help=( "count primary alignment (BAM flag 0x100) for multimapping reads. "
+                                "note: not tested with STAR --outSAMprimaryFlag AllBestScore") )
     parser.add_argument("--combine_unspliced", action="store_true", default=False,
                         help="dont distinguish spliced and unspliced UMI counts, instead as U")
     parser.add_argument("-u", "--UMI_correct", action="store_true", default=False, 
@@ -129,7 +132,7 @@ def umicount():
     if r.gtf is None and r.GTF_skip_parse is None:
         sys.exit('require one of --gtf, --GTF_skip_parse')
 
-    if (len(r.bams) == 0 or r.output_dir is None) and not (r.gtf and r.GTF_dump):
+    if (r.bams is None) and not (r.gtf and r.GTF_dump):
         sys.exit('no input files found, skipping input only valid with --gtf and --GTF_dump')
 
     # case when parsing GTF and pickling contents
@@ -169,4 +172,5 @@ def umicount():
         gtf_data = load_gtf_data(r.gtf, skipgtf=r.GTF_skip_parse) # only need to load once
         process_bam_parallel(filepairs, gtf_data, num_workers=r.cores,
                              cols_to_use=basecols, 
+                             count_primary=r.mm_count_primary,
                              umi_correct_params=umi_correct_params)
