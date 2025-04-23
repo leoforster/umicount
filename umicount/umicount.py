@@ -163,9 +163,13 @@ class ReadTrack:
         else: # when multiple genes overlap
             exongenes = {eattributes[eid][0] for eid in self.exon_overlap \
                          if eid in eattributes} # get gene ids from attribute
-            if len(exongenes) == 1: # if exon annotated for only 1 of overlapping genes: count it
+
+            # if exon annotated for only 1 of overlapping genes: count it
+            if len(exongenes) == 1:
                 self.gene_to_count = self.exon_to_count = exongenes.pop()
-            else: # if exons overlap or intronic in both: its ambiguous
+
+            # if exons overlap or intronic in both: its ambiguous
+            else:
                 self.category = '_ambiguous'
 
         return self
@@ -174,7 +178,7 @@ def extract_first_alignment(bundle, count_primary=False):
 
     if not bundle: raise ValueError("empty bundle: no alignments to extract")
 
-    r1_to_count = r2_to_count = None
+    r1_to_count, r2_to_count = bundle[0] # default to first
     read_category = '' # default value as in ReadTrack definition
 
     # multimapping readpair
@@ -192,28 +196,18 @@ def extract_first_alignment(bundle, count_primary=False):
                 raise ValueError("found multiple primary alignments:\n%s" %bundle)
 
             if not primaries: # no primary alignments (or not set by aligner)
-                # TODO: warn user?
-                r1_to_count, r2_to_count = bundle[0] # default to first
                 read_category = '_multimapping'
             else:
                 r1_to_count, r2_to_count = primaries[0]
-                read_category = ''
 
         else: # multimapping but no count_primary: use first pair
-            r1_to_count, r2_to_count = bundle[0]
             read_category = '_multimapping'
 
     # readpair has single alignment
     else:
-        r1, r2 = bundle[0]
-        r1_is_mapped = bool(r1 and r1.aligned)
-        r2_is_mapped = bool(r2 and r2.aligned)
-
-        if not (r1_is_mapped and r2_is_mapped):
+        if not ((r1_to_count and r1_to_count.aligned) and (r2_to_count and r2_to_count.aligned)):
             read_category = '_unmapped'
 
-        r1_to_count = r1
-        r2_to_count = r2
 
     return ReadTrack(read1_almnt=r1_to_count,
                      read2_almnt=r2_to_count,

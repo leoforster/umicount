@@ -111,8 +111,8 @@ def test_extract_first_alignment():
     """
     iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
     # Case 1: proper pair.
-    aln1 = DummyAlignment("readC_UMI", aligned=True, iv=iv)
-    aln2 = DummyAlignment("readC_UMI", aligned=True, iv=iv)
+    aln1 = DummyAlignment("readC_UMI", True, False, iv)
+    aln2 = DummyAlignment("readC_UMI", True, False, iv)
     bundle = [(aln1, aln2)]
     rt = extract_first_alignment(bundle)
     assert rt.category == ""
@@ -126,7 +126,7 @@ def test_extract_first_alignment():
     assert rt2.read2_almnt is None
 
     # Case 3: both alignments exist but one is not aligned.
-    aln3 = DummyAlignment("readD_UMI", aligned=False, iv=iv)
+    aln3 = DummyAlignment("readD_UMI", False, True, iv)
     bundle_unmapped2 = [(aln2, aln3)]
     rt3 = extract_first_alignment(bundle_unmapped2)
     assert rt3.category == "_unmapped"
