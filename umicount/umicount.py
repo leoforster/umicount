@@ -205,6 +205,8 @@ def extract_first_alignment(bundle, count_primary=False):
                 read_category = '_multimapping'
             else:
                 r1_to_count, r2_to_count = primaries[0]
+                if r1_to_count is None or r2_to_count is None: # require both
+                    read_category = '_unmapped'
 
         else: # multimapping but no count_primary: use first pair
             read_category = '_multimapping'
