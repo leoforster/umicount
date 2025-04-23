@@ -133,14 +133,15 @@ class ReadTrack:
                self.read2_almnt is not None and (self.category == '')
 
     def find_overlap(self, gfeatures, efeatures):
-        if not self.can_do_overlap():
-            return self
+        assert self.can_do_overlap()
 
         gene_ids = set()
         exon_ids = set()
         try:
             # overlap loop as in HTSeq count.py
             for almnt in [self.read1_almnt, self.read2_almnt]:
+                if almnt is None: continue
+
                 for iv, val in gfeatures[almnt.iv].steps():
                     gene_ids = gene_ids.union(val)
                 self.gene_overlap = list(gene_ids) # ids of overlapping genes
@@ -155,8 +156,7 @@ class ReadTrack:
         return self
 
     def evaluate_overlap(self, eattributes):
-        if not self.can_do_overlap():
-            return self
+        assert self.can_do_overlap()
 
         if len(self.gene_overlap) == 0: # intergenic
             self.category = '_no_feature'
@@ -211,8 +211,8 @@ def extract_first_alignment(bundle, count_primary=False):
 
     # readpair has single alignment
     else:
-        if r1_to_count is None or r2_to_count is None or \
-            not r1_to_count.aligned or not r2_to_count.aligned: # require both aligned
+        if (r1_to_count is None or not r1_to_count.aligned) or \
+           (r2_to_count is None or not r2_to_count.aligned): # either read unaligned
             read_category = '_unmapped'
 
     return ReadTrack(read1_almnt=r1_to_count,
