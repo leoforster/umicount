@@ -119,8 +119,11 @@ class ReadTrack:
     exon_to_count: str = ""
 
     def __post_init__(self):
-        parts = self.read1_almnt.read.name.rsplit('_', 1)
-        self.umi = parts[1] if len(parts) == 2 and parts[1] else None
+        if self.read1_almnt:
+            parts = self.read1_almnt.read.name.rsplit('_', 1)
+            self.umi = parts[1] if len(parts) == 2 and parts[1] else None
+        else:
+            self.umi = None
 
     def can_do_overlap(self):
         return self.read1_almnt is not None and \
@@ -207,7 +210,6 @@ def extract_first_alignment(bundle, count_primary=False):
     else:
         if not ((r1_to_count and r1_to_count.aligned) and (r2_to_count and r2_to_count.aligned)):
             read_category = '_unmapped'
-
 
     return ReadTrack(read1_almnt=r1_to_count,
                      read2_almnt=r2_to_count,
