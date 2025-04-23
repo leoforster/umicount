@@ -121,9 +121,12 @@ class ReadTrack:
     def __post_init__(self):
         if self.read1_almnt:
             parts = self.read1_almnt.read.name.rsplit('_', 1)
-            self.umi = parts[1] if len(parts) == 2 and parts[1] else None
+        elif self.read2_almnt:
+            parts = self.read2_almnt.read.name.rsplit('_', 1)
         else:
-            self.umi = None
+            parts = None
+
+        self.umi = parts[1] if len(parts) == 2 and parts[1] else None
 
     def can_do_overlap(self):
         return self.read1_almnt is not None and \
@@ -208,7 +211,8 @@ def extract_first_alignment(bundle, count_primary=False):
 
     # readpair has single alignment
     else:
-        if not ((r1_to_count and r1_to_count.aligned) and (r2_to_count and r2_to_count.aligned)):
+        if r1_to_count is None or r2_to_count is None or \
+            not r1_to_count.aligned or not r2_to_count.aligned: # require both aligned
             read_category = '_unmapped'
 
     return ReadTrack(read1_almnt=r1_to_count,
