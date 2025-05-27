@@ -417,7 +417,12 @@ def process_bam(bamfile, outfile, gtf_data,
 def _bam_worker(task_args):
     # worker function for multiprocessing
     infile, outfile, gtf_data, kwargs = task_args
-    process_bam(infile, outfile, gtf_data, **kwargs)
+
+    try:
+        process_bam(infile, outfile, gtf_data, **kwargs)
+    except Exception as e:
+        new_msg = f"in {infile}:\n{e}"
+        raise type(e)(new_msg) from e
 
 def process_bam_parallel(filepairs, gtf_data, num_workers=4,
                          cols_to_use=None, 

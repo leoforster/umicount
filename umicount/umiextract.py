@@ -177,8 +177,13 @@ def process_fastq(paths, outnames, umi_len,
 def _fastq_worker(task_args):
     # worker function for multiprocessing
     infile, outfile, kwargs = task_args
-    process_fastq(infile, outfile, **kwargs)
 
+    try:
+        process_fastq(infile, outfile, **kwargs)
+    except Exception as e:
+        new_msg = f"in {infile}:\n{e}"
+        raise type(e)(new_msg) from e
+    
 def process_fastq_parallel(filepairs, umi_len, num_workers=4,
                            only_umi=False, 
                            anchor_seq='ATTGCGCAATG', 
