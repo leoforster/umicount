@@ -3,8 +3,6 @@ import gzip
 import tempfile
 import os
 import HTSeq as htseq
-import re
-import regex
 
 from umicount.umiextract import process_fastq
 

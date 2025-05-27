@@ -388,21 +388,23 @@ def parse_bam_and_count(bamfile, gtf_data,
 
     return gcounts, totalumis
 
-def write_counts(outfile, bamfile, gene_counts, gattributes, cols_to_use):
-    assert validate_cols_to_use(cols_to_use)
+def write_counts_for_col(filecounts, col, outdir, geneorder, sep='\t'):
 
-    with open(outfile, 'w') as out:
-        header_fields = [os.path.basename(bamfile)]
-        for b in cols_to_use:
-            header_fields.append(b)
-        out.write('\t'.join(header_fields) + '\n')
-        for gene, counts in gene_counts.items():
-            line_fields = [gene]
-            for b in cols_to_use:
-                line_fields.append(str(gene_counts[gene][b]))
-            out.write('\t'.join(line_fields) + '\n')
+    filenames = list(filecounts.keys()) # fix order
 
-def process_bam(bamfile, outfile, gtf_data,
+    lines = [sep.join(['feature'] + filenames)] # start with header
+    for g in geneorder:
+        linevals = []
+        for fname in filenames:
+            linevals.append( str( filecounts.get(fname, {}).get(g, {}).get(col, 0))) # defaults to 0 if missing
+
+        lines.append(sep.join([g] + linevals))
+    
+    ext = 'tsv' if sep == '\t' else 'csv' if sep == ',' else 'txt'
+    with open(os.path.join(outdir, f'umicounts.{col}.{ext}'), 'w') as f:
+        f.write('\n'.join(lines))
+
+def process_bam(bamfile, gtf_data,
                 cols_to_use=None, 
                 count_primary=False,
                 multiple_primary_action='warn',
@@ -420,8 +422,7 @@ def process_bam(bamfile, outfile, gtf_data,
                                         multiple_primary_action=multiple_primary_action,
                                         umi_correct_params=umi_correct_params)
 
-    # output counts table to file
-    write_counts(outfile, bamfile, umicount, gattributes, cols_to_use)
+
 
     # print summarized quantities of counted read categories
     if sum(ttl.values()) > 0:
@@ -434,24 +435,28 @@ def process_bam(bamfile, outfile, gtf_data,
     else:
         print(f"empty BAM file")
 
+    return umicount
+
 def _bam_worker(task_args):
     # worker function for multiprocessing
     infile, outfile, gtf_data, kwargs = task_args
 
     try:
-        process_bam(infile, outfile, gtf_data, **kwargs)
+        umicount = process_bam(infile, gtf_data, **kwargs)
     except Exception as e:
         new_msg = f"in {infile}:\n{e}"
         raise type(e)(new_msg) from e
 
-def process_bam_parallel(filepairs, gtf_data, num_workers=4,
+    return infile, umicount
+
+def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
                          cols_to_use=None, 
                          count_primary=False,
                          multiple_primary_action='warn',
                          umi_correct_params=None):
 
     # wrapper around process_bam to handle multiple BAM files in parallel
-    # filepairs are a list of tasks as tuples of ( bamfile, outfile )
+    # bamfiles is a list of bam file paths
     # gtf_data can be parsed from GTF file using load_gtf_data(gtffile)
 
     # bundle constant args
@@ -463,6 +468,11 @@ def process_bam_parallel(filepairs, gtf_data, num_workers=4,
     )
 
     # map the worker over the filepairs
-    tasks = [(infile, outfile, gtf_data, kwargs) for (infile, outfile) in filepairs]
+    tasks = [(infile, gtf_data, kwargs) for infile in bamfiles]
     with Pool(num_workers) as pool:
         results = pool.map(_bam_worker, tasks)
+
+    # output counts table to file 
+    filecounts = {fname:umicounts for fname, umicounts in results} # dict of filename:umicounts
+    for c in cols_to_use:
+        write_counts_for_col(filecounts, c, outdir, list(gtf_data[2].keys()), sep='\t') # gtf_data[2] is gattributes

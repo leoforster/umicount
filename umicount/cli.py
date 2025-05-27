@@ -114,7 +114,7 @@ def umicount():
     parser.add_argument("-f", "--bams", type=existing_file, nargs="+",
                         help="input bamfiles from modified fastqs, sorted by read")
     parser.add_argument("-d", "--output_dir", type=existing_dir, default=os.getcwd(), 
-                        help="Directory to output counts matrices")
+                        help="Directory to output counts matrices, named as umicounts.*.tsv")
     parser.add_argument("-c", "--cores", action="store", type=int,
                         help="Number of cores for processing BAMs: each core processes 1 sample")
     parser.add_argument("-g", "--gtf", type=existing_file, help="input GTF file (ensembl format)")
@@ -186,15 +186,12 @@ def umicount():
     # collate input and output files in filepairs
     filepairs = []
     filedir = os.path.abspath(os.path.expanduser(r.output_dir))
-
-    for bamfile in sorted(r.bams, key=lambda i: os.path.getsize(i), reverse=True):
-        base, ext = os.path.splitext(bamfile)
-        filepairs.append( (bamfile, os.path.join(filedir, f"{base}.umicounts")) )
+    bamfiles = sorted(r.bams, key=lambda i: os.path.getsize(i), reverse=True)
 
     # run umicount on BAMs split by thread
     if len(filepairs) > 0:
         gtf_data = load_gtf_data(r.gtf, skipgtf=r.GTF_skip_parse) # only need to load once
-        process_bam_parallel(filepairs, gtf_data, num_workers=r.cores,
+        process_bam_parallel(bamfiles, filedir, gtf_data, num_workers=r.cores,
                              cols_to_use=basecols, 
                              count_primary=r.mm_count_primary,
                              multiple_primary_action=r.multiple_primary_action,

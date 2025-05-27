@@ -1,6 +1,4 @@
 import pytest
-import gzip
-import tempfile
 import os
 import HTSeq as htseq
 import re

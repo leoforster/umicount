@@ -1,10 +1,5 @@
 import pytest
-import gzip
-import tempfile
-import os
 import HTSeq as htseq
-import re
-import regex
 
 from umicount.umiextract import (slice_SequenceWithQualities, get_fastq_str)
 

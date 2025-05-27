@@ -1,4 +1,3 @@
-import pickle
 import pytest
 
 from umicount.umicount import umi_correction
