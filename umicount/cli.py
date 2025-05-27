@@ -139,7 +139,7 @@ def umicount():
                         help="Hamming distance threshold for merging similar UMIs, usually 1")
     parser.add_argument("--count_ratio_threshold", action="store", type=int, default=2,
                         help=("Threshold where UMIs are only merged if one has "
-                              "at least (threshold*counts)-1 as many counts as the other"))
+                              "at least (threshold*counts)-1 as many counts as the other, usually 2"))
     
     r = parser.parse_args()
 
@@ -186,12 +186,11 @@ def umicount():
             sys.exit('requires rapidfuzz package to enable UMI correction')
 
     # collate input and output files in filepairs
-    filepairs = []
     filedir = os.path.abspath(os.path.expanduser(r.output_dir))
     bamfiles = sorted(r.bams, key=lambda i: os.path.getsize(i), reverse=True)
 
     # run umicount on BAMs split by thread
-    if len(filepairs) > 0:
+    if len(bamfiles) > 0:
         gtf_data = load_gtf_data(r.gtf, skipgtf=r.GTF_skip_parse) # only need to load once
         process_bam_parallel(bamfiles, filedir, gtf_data, num_workers=r.cores,
                              cols_to_use=basecols, 
