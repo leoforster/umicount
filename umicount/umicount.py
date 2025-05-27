@@ -5,7 +5,7 @@ import random
 from multiprocessing import Pool
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Tuple, List
+from typing import Any
 
 import HTSeq
 try:
@@ -413,7 +413,7 @@ def process_bam(bamfile, gtf_data,
     assert validate_cols_to_use(cols_to_use)
 
     # assign GTF data
-    gfeatures, efeatures, gattributes, eattributes = gtf_data
+    _, _, gattributes, _ = gtf_data
 
     # parsing BAM and count reads
     umicount, ttl = parse_bam_and_count(bamfile, gtf_data, 
@@ -439,7 +439,7 @@ def process_bam(bamfile, gtf_data,
 
 def _bam_worker(task_args):
     # worker function for multiprocessing
-    infile, outfile, gtf_data, kwargs = task_args
+    infile, gtf_data, kwargs = task_args
 
     try:
         umicount = process_bam(infile, gtf_data, **kwargs)
