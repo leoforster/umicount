@@ -57,6 +57,15 @@ def umiextract():
         if len(r.read1) != len(r.read2):
             sys.exit("if giving R2, number of R2 files must match R1")
 
+    # check implicity fuzzy_umi usage
+    if r.fuzzy_umi == False:
+        fuzzy_args = ['--anchor_mismatches', '--anchor_indels', '--trailing_Gs']
+        fuzzy_used = [i for i in fuzzy_args if i in sys.argv]
+
+        if len(fuzzy_used) > 0:
+            print(f'Note: supplied {", ".join(fuzzy_used)} without --fuzzy_umi, setting --fuzzy_umi=True')
+            r.fuzzy_umi = True
+
     # set up fuzzy matching
     fuzzy_umi_params={'anchor_max_mismatch':r.anchor_mismatches,
                       'anchor_max_indel':r.anchor_indels,
@@ -66,7 +75,7 @@ def umiextract():
         try:
             import regex
         except ModuleNotFoundError:
-            sys.exit('requires regex package to enable fuzzy_umi_extraction')
+            sys.exit('requires regex package to enable fuzzy UMI detection')
 
     # collate R1-R2 pairs for threading
     filedir = os.path.abspath(os.path.expanduser(r.output_dir))
@@ -147,6 +156,15 @@ def umicount():
         basecols += ['UE', 'UI', 'RE', 'RI']
     if r.no_dedup == False:
         basecols += ['D']
+
+    # check implicity fuzzy_umi usage
+    if r.UMI_correct == False:
+        umicorr_args = ['--count_ratio_threshold', '--hamming_threshold']
+        umicorr_used = [i for i in umicorr_args if i in sys.argv]
+
+        if len(umicorr_used) > 0:
+            print(f'Note: supplied {", ".join(umicorr_used)} without --UMI_correct, setting --UMI_correct=True')
+            r.UMI_correct = True
 
     # set up UMI correction
     umi_correct_params = {'countratio_threshold':r.count_ratio_threshold,
