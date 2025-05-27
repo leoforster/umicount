@@ -1,6 +1,7 @@
 import sys
 import os
 import pickle
+import random
 from multiprocessing import Pool
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -180,7 +181,7 @@ class ReadTrack:
 
         return self
 
-def extract_first_alignment(bundle, count_primary=False):
+def extract_first_alignment(bundle, bamfile, count_primary=False, multiple_primary_action='warn'):
 
     if not bundle: raise ValueError("empty bundle: no alignments to extract")
 
@@ -199,7 +200,21 @@ def extract_first_alignment(bundle, count_primary=False):
                     primaries.append((p1, p2))
 
             if len(primaries) > 1:
-                raise ValueError("found multiple primary alignments:\n%s" %bundle)
+                if multiple_primary_action == 'warn':
+                    rn = r1_to_count.read.name
+                    sys.stderr.write(f'Warning: {bamfile} has {len(primaries)} primary alignments for {rn}')
+
+                    # pick an alignment at random, by reverting to 1-element list
+                    primaries = [random.choice(primaries)]
+
+                elif multiple_primary_action == 'raise':
+                    raise ValueError(f'in {bamfile} found multiple primary alignments:\n{bundle}')
+
+                elif multiple_primary_action == 'skip':
+                    read_category = '_multimapping'
+
+                else:
+                    raise ValueError(f'invalid value {multiple_primary_action} for multiple_primary_action')
 
             if not primaries: # no primary alignments (or not set by aligner)
                 read_category = '_multimapping'
@@ -254,6 +269,7 @@ def umi_correction(umicounts, countratio=2, hamming_threshold=1):
 def parse_bam_and_count(bamfile, gtf_data, 
                         cols_to_use=None, 
                         count_primary=False,
+                        multiple_primary_action='warn',
                         umi_correct_params=None):
 
     assert validate_cols_to_use(cols_to_use)
@@ -280,7 +296,9 @@ def parse_bam_and_count(bamfile, gtf_data,
             totalumis['uncounted'] += 1
             continue
 
-        readpair = extract_first_alignment(bundle, count_primary=count_primary)
+        readpair = extract_first_alignment(bundle, bamfile,
+                                           count_primary=count_primary,
+                                           multiple_primary_action=multiple_primary_action)
 
         # extract overlapping genes, exons
         if readpair.can_do_overlap(): readpair.find_overlap(gfeatures, efeatures)
@@ -387,6 +405,7 @@ def write_counts(outfile, bamfile, gene_counts, gattributes, cols_to_use):
 def process_bam(bamfile, outfile, gtf_data,
                 cols_to_use=None, 
                 count_primary=False,
+                multiple_primary_action='warn',
                 umi_correct_params=None):
 
     assert validate_cols_to_use(cols_to_use)
@@ -398,6 +417,7 @@ def process_bam(bamfile, outfile, gtf_data,
     umicount, ttl = parse_bam_and_count(bamfile, gtf_data, 
                                         cols_to_use=cols_to_use, 
                                         count_primary=count_primary,
+                                        multiple_primary_action=multiple_primary_action,
                                         umi_correct_params=umi_correct_params)
 
     # output counts table to file
@@ -427,6 +447,7 @@ def _bam_worker(task_args):
 def process_bam_parallel(filepairs, gtf_data, num_workers=4,
                          cols_to_use=None, 
                          count_primary=False,
+                         multiple_primary_action='warn',
                          umi_correct_params=None):
 
     # wrapper around process_bam to handle multiple BAM files in parallel
@@ -437,6 +458,7 @@ def process_bam_parallel(filepairs, gtf_data, num_workers=4,
     kwargs = dict(
         cols_to_use=cols_to_use,
         count_primary=count_primary,
+        multiple_primary_action=multiple_primary_action,
         umi_correct_params=umi_correct_params
     )
 

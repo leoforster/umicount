@@ -114,26 +114,26 @@ def test_extract_first_alignment():
     aln1 = DummyAlignment("readC_UMI", True, False, iv)
     aln2 = DummyAlignment("readC_UMI", True, False, iv)
     bundle = [(aln1, aln2)]
-    rt = extract_first_alignment(bundle)
+    rt = extract_first_alignment(bundle, bamfile="test")
     assert rt.category == ""
     assert rt.read1_almnt.read.name == "readC_UMI"
     assert rt.read2_almnt is not None
 
     # Case 2: one alignment is None (simulate unmapped).
     bundle_unmapped = [(aln1, None)]
-    rt2 = extract_first_alignment(bundle_unmapped)
+    rt2 = extract_first_alignment(bundle_unmapped, bamfile="test")
     assert rt2.category == "_unmapped"
     assert rt2.read2_almnt is None
 
     # Case 3: both alignments exist but one is not aligned.
     aln3 = DummyAlignment("readD_UMI", False, True, iv)
     bundle_unmapped2 = [(aln2, aln3)]
-    rt3 = extract_first_alignment(bundle_unmapped2)
+    rt3 = extract_first_alignment(bundle_unmapped2, bamfile="test")
     assert rt3.category == "_unmapped"
 
     # Case 4: empty bundle
     with pytest.raises(ValueError):
-        extract_first_alignment([])
+        extract_first_alignment([], bamfile="test")
 
     # Case 5: multimapping but count_primary not set
     aln4 = DummyAlignment("readE_UMI", True, True, iv)
@@ -141,33 +141,62 @@ def test_extract_first_alignment():
     aln6 = DummyAlignment("readF_UMI", True, True, iv)
     aln7 = DummyAlignment("readF_UMI", True, True, iv)
     bundle_multi = [(aln4, aln5), (aln6, aln7)]
-    rt5 = extract_first_alignment(bundle_multi, count_primary=False)
+    rt5 = extract_first_alignment(bundle_multi, bamfile="test", count_primary=False)
     assert rt5.category == "_multimapping"
     assert rt5.read1_almnt is aln4
     assert rt5.read2_almnt is aln5
 
     # Case 6: multimapping with no primary alignment
     bundle_multi = [(aln4, aln5), (aln6, aln7)]
-    rt6 = extract_first_alignment(bundle_multi, count_primary=True)
+    rt6 = extract_first_alignment(bundle_multi, bamfile="test", count_primary=True)
     assert rt6.category == "_multimapping"
 
-    # Case 7: multimapping reads with a primary alignment
-    aln4.not_primary_alignment = True
-    aln5.not_primary_alignment = True
-    aln6.not_primary_alignment = False # primary
-    aln7.not_primary_alignment = False # primary
-    bundle_multi = [(aln4, aln5), (aln6, aln7)]
-    rt7 = extract_first_alignment(bundle_multi, count_primary=True)
-    assert rt7.category == ""
-    assert rt7.read1_almnt is aln6
-    assert rt7.read2_almnt is aln7
+def test_multimapping_primary_alignments():
+    """
+    Test extract_first_alignment for cases involving primary alignments.
+    """
+    iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
 
-    # Case 8: multimapping with multiple primary alignments
-    aln4.not_primary_alignment = False
-    aln5.not_primary_alignment = False
-    bundle_multi = [(aln4, aln5), (aln6, aln7)]
+    aln1 = DummyAlignment("readE_UMI", True, True, iv)
+    aln2 = DummyAlignment("readE_UMI", True, True, iv)
+    aln3 = DummyAlignment("readF_UMI", True, True, iv)
+    aln4 = DummyAlignment("readF_UMI", True, True, iv)
+
+    # Case 1: multimapping reads with a primary alignment
+    aln1.not_primary_alignment = True
+    aln2.not_primary_alignment = True
+    aln3.not_primary_alignment = False # primary
+    aln4.not_primary_alignment = False # primary
+    bundle_multi = [(aln1, aln2), (aln3, aln4)]
+    rt1 = extract_first_alignment(bundle_multi, bamfile="test", count_primary=True)
+    assert rt1.category == ""
+    assert rt1.read1_almnt is aln3
+    assert rt1.read2_almnt is aln4
+
+    # set all alignments to primary
+    aln1.not_primary_alignment = False
+    aln2.not_primary_alignment = False
+    bundle_multi = [(aln1, aln2), (aln3, aln4)] # all are primary
+
+    # Case 3: testing multiple_primary_action raise
     with pytest.raises(ValueError):
-        extract_first_alignment(bundle_multi, count_primary=True)
+        extract_first_alignment(bundle_multi, bamfile="test", count_primary=True, 
+                                multiple_primary_action='raise')
+
+    # Case 4: testing multiple_primary_action warn
+    rt4 = extract_first_alignment(bundle_multi, bamfile="test", count_primary=True, 
+                                  multiple_primary_action='warn')
+    assert rt4.category == ""
+
+    # Case 5: testing multiple_primary_action skip
+    rt5 = extract_first_alignment(bundle_multi, bamfile="test", count_primary=True, 
+                                  multiple_primary_action='skip')
+    assert rt5.category == "_multimapping"
+
+    # Case 6: test nonsense multiple_primary_action
+    with pytest.raises(ValueError):
+        extract_first_alignment(bundle_multi, bamfile="test", count_primary=True, 
+                                multiple_primary_action='abc')
 
 def test_read_at_exon_boundary():
     """

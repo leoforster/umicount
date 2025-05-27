@@ -123,8 +123,11 @@ def umicount():
     parser.add_argument("--no_dedup", action="store_true", default=False,
                         help="dont deduplicate UMI counts")
     parser.add_argument("--mm_count_primary", action="store_true", default=False,
-                        help=( "count primary alignment (BAM flag 0x100) for multimapping reads. "
-                                "note: not tested with STAR --outSAMprimaryFlag AllBestScore") )
+                        help=( "count primary alignment (BAM flag 0x100) for multimapping reads.") )
+    parser.add_argument("--multiple_primary_action", action="store", default="warn",
+                        help=( "how to handle cases when a read has multiple primary alignments: "
+                               "warn (default) - warn user and pick random alignment to count, "
+                               "raise - raise error and exit, skip - alignment is counted as multimapping") )
     parser.add_argument("--combine_unspliced", action="store_true", default=False,
                         help="dont distinguish spliced and unspliced UMI counts, instead as U")
     parser.add_argument("-u", "--UMI_correct", action="store_true", default=False, 
@@ -143,6 +146,9 @@ def umicount():
 
     if (r.bams is None) and not (r.gtf and r.GTF_dump):
         sys.exit('no input files found, skipping input only valid with --gtf and --GTF_dump')
+
+    if multiple_primary_action not in ['warn', 'skip', 'raise']:
+        sys.exit(f'invalid value {multiple_primary_action} for --multiple_primary_action')
 
     # case when parsing GTF and pickling contents
     if r.gtf and r.GTF_dump:
@@ -191,4 +197,5 @@ def umicount():
         process_bam_parallel(filepairs, gtf_data, num_workers=r.cores,
                              cols_to_use=basecols, 
                              count_primary=r.mm_count_primary,
+                             multiple_primary_action=r.multiple_primary_action,
                              umi_correct_params=umi_correct_params)
