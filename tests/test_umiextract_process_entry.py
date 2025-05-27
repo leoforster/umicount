@@ -50,7 +50,7 @@ def test_process_entry_fuzzy_matching_basic():
 
     anchor_max_mismatch = 1
     anchor_max_indel = 0
-    min_trailing_G = 3
+    trailing_hamming_threshold = 0
 
     anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_max_mismatch + anchor_max_indel}}}"
     umi_capture = rf"([ACGTN]{{{umi_len}}})"
@@ -64,7 +64,7 @@ def test_process_entry_fuzzy_matching_basic():
                                              anchor_seq=anchor_seq, trailing_seq=trailing_seq,
                                              fuzzy_umi_params={'anchor_max_mismatch':anchor_max_mismatch,
                                                                'anchor_max_indel':anchor_max_indel,
-                                                               'min_trailing_G':min_trailing_G,
+                                                               'trailing_dist_thresh':trailing_hamming_threshold,
                                                                'fuzzy_pattern':fuzzy_pattern})
         entry_names.append(entry_processed)
 
@@ -92,7 +92,7 @@ def test_process_entry_fuzzy_matching():
 
     anchor_max_mismatch = 1
     anchor_max_indel = 1
-    min_trailing_G = 2
+    trailing_hamming_threshold = 1
 
     anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_max_mismatch + anchor_max_indel}}}"
     umi_capture = rf"([ACGTN]{{{umi_len}}})"
@@ -106,7 +106,7 @@ def test_process_entry_fuzzy_matching():
                                              anchor_seq=anchor_seq, trailing_seq=trailing_seq,
                                              fuzzy_umi_params={'anchor_max_mismatch':anchor_max_mismatch,
                                                                'anchor_max_indel':anchor_max_indel,
-                                                               'min_trailing_G':min_trailing_G,
+                                                               'trailing_dist_thresh':trailing_hamming_threshold,
                                                                'fuzzy_pattern':fuzzy_pattern})
         entry_names.append(entry_processed)
 
@@ -140,7 +140,7 @@ def test_process_entry_fuzzy_matching_onlyumi():
 
     anchor_max_mismatch = 1
     anchor_max_indel = 1
-    min_trailing_G = 2
+    trailing_hamming_threshold = 1
 
     anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_max_mismatch + anchor_max_indel}}}"
     umi_capture = rf"([ACGTN]{{{umi_len}}})"
@@ -154,7 +154,7 @@ def test_process_entry_fuzzy_matching_onlyumi():
                                              anchor_seq=anchor_seq, trailing_seq=trailing_seq,
                                              fuzzy_umi_params={'anchor_max_mismatch':anchor_max_mismatch,
                                                                'anchor_max_indel':anchor_max_indel,
-                                                               'min_trailing_G':min_trailing_G,
+                                                               'trailing_dist_thresh':trailing_hamming_threshold,
                                                                'fuzzy_pattern':fuzzy_pattern})
         entry_names.append(entry_processed)
 

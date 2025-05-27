@@ -48,8 +48,8 @@ def umiextract():
                         help="Max mismatches allowed in anchor in fuzzy UMI extraction")
     parser.add_argument("--anchor_indels", action="store", type=int, default=1, 
                         help="Max indels allowed in anchor in fuzzy UMI extraction")
-    parser.add_argument("--trailing_Gs", action="store", type=int, default=2, 
-                        help="Minimum number of Gs required in trailing sequence")
+    parser.add_argument("--trailing_hamming_threshold", action="store", type=int, default=2, 
+                        help="Maximum Hamming distance in trailing sequence")
 
     r = parser.parse_args()
 
@@ -59,7 +59,7 @@ def umiextract():
 
     # check implicity fuzzy_umi usage
     if r.fuzzy_umi == False:
-        fuzzy_args = ['--anchor_mismatches', '--anchor_indels', '--trailing_Gs']
+        fuzzy_args = ['--anchor_mismatches', '--anchor_indels', '--trailing_hamming_threshold']
         fuzzy_used = [i for i in fuzzy_args if i in sys.argv]
 
         if len(fuzzy_used) > 0:
@@ -69,13 +69,14 @@ def umiextract():
     # set up fuzzy matching
     fuzzy_umi_params={'anchor_max_mismatch':r.anchor_mismatches,
                       'anchor_max_indel':r.anchor_indels,
-                      'min_trailing_G':r.trailing_Gs} if r.fuzzy_umi else None
+                      'trailing_dist_thresh':r.trailing_hamming_threshold} if r.fuzzy_umi else None
 
     if fuzzy_umi_params:
         try:
             import regex
+            from rapidfuzz.distance import Hamming
         except ModuleNotFoundError:
-            sys.exit('requires regex package to enable fuzzy UMI detection')
+            sys.exit('requires both regex and rapidfuzz package to enable fuzzy UMI detection')
 
     # collate R1-R2 pairs for threading
     filedir = os.path.abspath(os.path.expanduser(r.output_dir))
@@ -125,6 +126,7 @@ def umicount():
     parser.add_argument("--mm_count_primary", action="store_true", default=False,
                         help=( "count primary alignment (BAM flag 0x100) for multimapping reads.") )
     parser.add_argument("--multiple_primary_action", action="store", default="warn",
+                        choices=['warn', 'raise', 'skip'],
                         help=( "how to handle cases when a read has multiple primary alignments: "
                                "warn (default) - warn user and pick random alignment to count, "
                                "raise - raise error and exit, skip - alignment is counted as multimapping") )

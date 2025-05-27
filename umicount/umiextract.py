@@ -6,6 +6,11 @@ import HTSeq as htseq
 from multiprocessing import Pool
 from contextlib import nullcontext
 
+try:
+    from rapidfuzz.distance import Hamming
+except: # this is checked in cli.py
+    pass
+
 def slice_SequenceWithQualities(swq, start=None):
     # override SequenceWithQualities.__getitem__ appending [part] to swq.name when slicing
     assert isinstance(swq, htseq.SequenceWithQualities)
@@ -48,15 +53,16 @@ def process_entry(entry, pattern, umi_len, only_umi,
 
             if match:
                 _, m_end = match.span()
-                trailing_seq_hit = seq_str[m_end:m_end+len(trailing_seq)]
+                trailing_hit = seq_str[m_end:m_end+len(trailing_seq)]
 
                 # count mismatches, insertions, deletions
                 cmis, cins, cdel = match.fuzzy_counts
 
-                # check against mismatch, indel, and G-count thresholds
+                # check against mismatch, indel, and trailing dist thresholds
                 if cmis <= fuzzy_umi_params['anchor_max_mismatch'] \
                     and (cins + cdel) <= fuzzy_umi_params['anchor_max_indel'] \
-                    and trailing_seq_hit.count('G') >= fuzzy_umi_params['min_trailing_G']:
+                    and Hamming.distance(trailing_seq, 
+                                         trailing_hit) <= fuzzy_umi_params['trailing_dist_thresh']:
                     umi = match.group(2)
                 else:
                     umi = None
@@ -86,10 +92,12 @@ def precompile_regex(umi_len, anchor_seq, trailing_seq, fuzzy_umi_params):
 
         anchor_fuzzy = rf"({anchor_seq}){{e<={anchor_max_mismatch + anchor_max_indel}}}"
         umi_capture = rf"([ACGTN]{{{umi_len}}})"
+
+        # fuzzy doesnt use trailing seq, checked after match
         fuzzy_pattern = regex.compile(anchor_fuzzy + umi_capture, flags=regex.BESTMATCH)
         fuzzy_umi_params['fuzzy_pattern'] = fuzzy_pattern
     
-    pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})")
+    pattern = re.compile(f"({anchor_seq})[NGCAT]{{{umi_len}}}({trailing_seq})") # exact match
     return pattern
 
 def process_fastq(paths, outnames, umi_len, 
