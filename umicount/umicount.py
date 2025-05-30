@@ -186,15 +186,13 @@ class ReadTrack:
 
         return self
 
-def filter_reads_by_mapQ(bundle, min_read_mapQ=0):
+def filter_aligned_reads(bundle, min_read_mapQ=0):
 
     filtpass = []
     for r1, r2 in bundle:
-
         p1 = r1 if r1 and r1.aligned and r1.aQual >= min_read_mapQ else None
         p2 = r2 if r2 and r2.aligned and r2.aQual >= min_read_mapQ else None
-
-        if p1 or p2:
+        if p1 or p2: # at least one of r1/r2 is aligned and passes mapQ
             filtpass.append( (p1, p2) )
 
     return filtpass
@@ -252,23 +250,25 @@ def set_alignment_category(bundle, bamfile,
 
     if not bundle: raise ValueError("empty bundle: no alignments to extract")
 
-    # prune by mapQ
-    bundle_mapq_filt = filter_reads_by_mapQ(bundle, min_read_mapQ=min_read_mapQ)
-    if all(r1 is None and r2 is None for r1, r2 in bundle_mapq_filt):
-        return ReadTrack(read1_almnt=None,
-                         read2_almnt=None,
+    # filter aligned reads and prune by mapQ
+    aread_bundle = filter_aligned_reads(bundle, min_read_mapQ=min_read_mapQ)
+
+    # if none of the bundle has reads aligned in a proper pair, its _unmapped
+    if (not aread_bundle) or all(r1 is None or r2 is None for r1, r2 in aread_bundle):
+        return ReadTrack(read1_almnt=bundle[0][0], # preserve readname UMI information
+                         read2_almnt=bundle[0][1],
                          category='_unmapped')
 
     # multimapping readpair
-    if len(bundle_mapq_filt) > 1:
-        return set_multimapper_category(bundle_mapq_filt, bamfile,
+    if len(aread_bundle) > 1:
+        return set_multimapper_category(aread_bundle, bamfile,
                                         count_primary=count_primary,
                                         multiple_primary_action=multiple_primary_action)
 
     # readpair has single alignment
     else:
-        rt = ReadTrack(read1_almnt=bundle_mapq_filt[0][0],
-                       read2_almnt=bundle_mapq_filt[0][1],
+        rt = ReadTrack(read1_almnt=aread_bundle[0][0],
+                       read2_almnt=aread_bundle[0][1],
                        category='')
 
         if (rt.read1_almnt is None or not rt.read1_almnt.aligned) or \
@@ -342,7 +342,7 @@ def parse_bam_and_count(bamfile, gtf_data,
                                           min_read_mapQ=0,
                                           count_primary=count_primary,
                                           multiple_primary_action=multiple_primary_action)
- 
+
         # extract overlapping genes, exons
         if readpair.can_do_overlap(): readpair.find_overlap(gfeatures, efeatures)
         if readpair.can_do_overlap(): readpair.evaluate_overlap(eattributes)

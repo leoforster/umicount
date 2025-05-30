@@ -5,7 +5,7 @@ from umicount.umicount import (
     parse_gtf,
     ReadTrack,
     set_alignment_category,
-    filter_reads_by_mapQ,
+    filter_aligned_reads,
     parse_bam_and_count
 )
 
@@ -106,41 +106,41 @@ def test_parse_malformed_gtf(tmp_path):
     with pytest.raises(ValueError):
         result = parse_gtf(str(gtf_file))
 
-def test_filter_reads_by_mapQ():
+def test_filter_aligned_reads():
     """
-    Test return of filter_reads_by_mapQ.
+    Test return of filter_aligned_reads.
     """
     iv = HTSeq.GenomicInterval("chr1", 100, 200, "+")
     # Case 1: single readpair with mapQ pass.
     aln1 = DummyAlignment("readC_UMI", True, False, iv, 0)
     aln2 = DummyAlignment("readC_UMI", True, False, iv, 0)
     bundle = [(aln1, aln2)]
-    bd = filter_reads_by_mapQ(bundle, min_read_mapQ=0)
-    assert len(bd) == 1
+    bd = filter_aligned_reads(bundle, min_read_mapQ=0)
+    assert bd == bundle
 
     # Case 2: multiple readpair with mapQ pass.
     aln3 = DummyAlignment("readC_UMI", True, False, iv, 0)
     aln4 = DummyAlignment("readC_UMI", True, False, iv, 0)
     bundle = [(aln1, aln2), (aln3, aln4)]
-    bd = filter_reads_by_mapQ(bundle, min_read_mapQ=0)
-    assert len(bd) == 2
+    bd = filter_aligned_reads(bundle, min_read_mapQ=0)
+    assert bd == bundle
 
     # Case 3: multiple readpair where one fails mapQ.
     aln3 = DummyAlignment("readC_UMI", True, False, iv, 3)
     aln4 = DummyAlignment("readC_UMI", True, False, iv, 3)
     bundle = [(aln1, aln2), (aln3, aln4)]
-    bd = filter_reads_by_mapQ(bundle, min_read_mapQ=1)
-    assert len(bd) == 1
+    bd = filter_aligned_reads(bundle, min_read_mapQ=1)
+    assert bd == [(aln3, aln4)]
 
     # Case 4: readpair fails mapQ.
     bundle = [(aln1, aln1)] # these fail as mapQ==0
-    bd = filter_reads_by_mapQ(bundle, min_read_mapQ=1)
-    assert len(bd) == 0
+    bd = filter_aligned_reads(bundle, min_read_mapQ=1)
+    assert bd == []
 
     # Case 5: like Case 4 but checking ReadTrack.cateogory 
     rt = set_alignment_category(bundle, bamfile="test", min_read_mapQ=1)
-    assert rt.read1_almnt == None
-    assert rt.read2_almnt == None
+    assert rt.read1_almnt is not None
+    assert rt.read2_almnt is not None
     assert rt.category == '_unmapped'
 
 def test_set_alignment_category():
