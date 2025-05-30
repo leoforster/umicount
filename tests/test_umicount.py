@@ -250,7 +250,7 @@ def test_read_at_exon_boundary():
     efeatures[exon_iv] += "exon1"
     dummy_eattributes = {"exon1": ["gene1", "GeneName1", "1"]}
     
-    rt.find_overlap(gfeatures, efeatures)
+    rt.find_overlap(gfeatures, efeatures, dummy_eattributes)
     rt.evaluate_overlap(dummy_eattributes)
     assert rt.gene_to_count == "gene1"
     assert rt.exon_to_count == "exon1"
@@ -269,7 +269,7 @@ def test_read_wrong_strand():
     # Create a read aligned on the minus strand.
     aln = DummyAlignment("read_strand", True, False, HTSeq.GenomicInterval("chr1", 100, 200, "-"), 0)
     rt = ReadTrack(aln, aln)
-    rt.find_overlap(gfeatures, efeatures)
+    rt.find_overlap(gfeatures, efeatures, dummy_eattributes)
     rt.evaluate_overlap(dummy_eattributes)
     assert rt.category == "_no_feature"
 
@@ -319,15 +319,60 @@ def test_readtrack_unique_overlap():
     gfeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     gfeatures[iv] += "gene1"
-    efeatures[iv] += "exon1"
-    dummy_eattributes = {"exon1": ["gene1", "GeneName1", "1"]}
+    efeatures[iv] += "g1exon1"
+    dummy_eattributes = {"g1exon1": ["gene1", "GeneName1", "1"]}
     
-    rt.find_overlap(gfeatures, efeatures)
+    rt.find_overlap(gfeatures, efeatures, dummy_eattributes)
     rt.evaluate_overlap(dummy_eattributes)
     
     assert rt.gene_to_count == "gene1"
-    assert rt.exon_to_count == "exon1"
+    assert rt.exon_to_count == "g1exon1"
     assert rt.category == ""
+
+def test_readtrack_consensus_overlap():
+    """
+    If both reads from 1 bundle overlap 2 exons it should be assigned that vs another
+    gene with only a single exon in that interval.
+    """
+    ivg1 = HTSeq.GenomicInterval("chr1", 0, 200, "+") # gene1
+    ivg1e1 = HTSeq.GenomicInterval("chr1", 0, 50, "+") # gene1exon1
+    ivg1e2 = HTSeq.GenomicInterval("chr1", 150, 200, "+") # gene1exon2
+    ivg2 = HTSeq.GenomicInterval("chr1", 0, 200, "+") # gene2
+    ivg2e1 = HTSeq.GenomicInterval("chr1", 150, 200, "+") # gene2exon1
+    ivint = HTSeq.GenomicInterval("chr1", 51, 149, "+") # intergenic
+
+    gfeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
+    efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
+    gfeatures[ivg1] += "gene1"
+    gfeatures[ivg2] += "gene2"
+    efeatures[ivg1e1] += "g1exon1"
+    efeatures[ivg1e2] += "g1exon2"
+    efeatures[ivg1e1] += "g2exon1"
+    dummy_eattributes = {
+        "g1exon1": ["gene1", "GeneName1", "1"],
+        "g1exon2": ["gene1", "GeneName1", "2"],
+        "g2exon1": ["gene2", "GeneName2", "1"]
+    }
+
+    aln1 = DummyAlignment("read1_UMI", True, False, ivg1e1, 0)
+    aln2 = DummyAlignment("read1_UMI", True, False, ivg1e2, 0)
+    rt1 = ReadTrack(aln1, aln2)
+
+    rt1.find_overlap(gfeatures, efeatures, dummy_eattributes)
+    rt1.evaluate_overlap(dummy_eattributes)
+
+    assert rt1.gene_to_count == "gene1"
+    assert rt1.category == ""
+
+    aln3 = DummyAlignment("read2_UMI", True, False, ivg1e1, 0)
+    aln4 = DummyAlignment("read2_UMI", True, False, ivint, 0)
+    rt2 = ReadTrack(aln3, aln4)
+
+    rt2.find_overlap(gfeatures, efeatures, dummy_eattributes)
+    rt2.evaluate_overlap(dummy_eattributes)
+
+    assert rt2.gene_to_count == ""
+    assert rt2.category == "_ambiguous"
 
 def test_readtrack_no_feature():
     """
@@ -338,7 +383,7 @@ def test_readtrack_no_feature():
     gfeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     
-    rt.find_overlap(gfeatures, efeatures)
+    rt.find_overlap(gfeatures, efeatures, {})
     rt.evaluate_overlap({})
     
     assert rt.category == "_no_feature"
@@ -355,14 +400,14 @@ def test_readtrack_ambiguous():
     efeatures = HTSeq.GenomicArrayOfSets("auto", stranded=False)
     gfeatures[iv] += "gene1"
     gfeatures[iv] += "gene2"
-    efeatures[iv] += "exon1"
-    efeatures[iv] += "exon2"
+    efeatures[iv] += "g1exon1"
+    efeatures[iv] += "g2exon1"
     dummy_eattributes = {
-        "exon1": ["gene1", "GeneName1", "1"],
-        "exon2": ["gene2", "GeneName2", "1"]
+        "g1exon1": ["gene1", "GeneName1", "1"],
+        "g2exon1": ["gene2", "GeneName2", "1"]
     }
     
-    rt.find_overlap(gfeatures, efeatures)
+    rt.find_overlap(gfeatures, efeatures, dummy_eattributes)
     rt.evaluate_overlap(dummy_eattributes)
     
     assert rt.category == "_ambiguous"
@@ -381,19 +426,19 @@ def test_readtrack_multiple_overlap_single_gene():
     gfeatures[iv] += "gene1"
     gfeatures[iv] += "gene2"
     # Both exons come from gene1:
-    efeatures[iv] += "exon1"
-    efeatures[iv] += "exon2"
+    efeatures[iv] += "g1exon1"
+    efeatures[iv] += "g1exon2"
     dummy_eattributes = {
-        "exon1": ["gene1", "GeneName1", "1"],
-        "exon2": ["gene1", "GeneName1", "2"]
+        "g1exon1": ["gene1", "GeneName1", "1"],
+        "g1exon2": ["gene1", "GeneName1", "2"]
     }
     
-    rt.find_overlap(gfeatures, efeatures)
+    rt.find_overlap(gfeatures, efeatures, dummy_eattributes)
     rt.evaluate_overlap(dummy_eattributes)
     
     assert rt.category == ""
     assert rt.gene_to_count == "gene1"
-    assert rt.exon_to_count == "gene1"
+    assert rt.exon_to_count in ["g1exon1", "g1exon2"]
 
 def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     """
@@ -405,8 +450,8 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     ivexon2 = HTSeq.GenomicInterval("chr1", 300, 400, "+")
     genes_intervals = [
         ("gene1", "GeneName1", "exon1", ivgene, False), # overarching gene definition
-        ("gene1", "GeneName1", "exon1", ivexon1, True), # exon1 definition for gene1
-        ("gene1", "GeneName1", "exon2", ivexon2, True), # exon2 definition for gene1
+        ("gene1", "GeneName1", "g1exon1", ivexon1, True), # exon1 definition for gene1
+        ("gene1", "GeneName1", "g1exon2", ivexon2, True), # exon2 definition for gene1
     ]
     gtf_data = get_dummy_gtf_dump(genes_intervals)
     
@@ -472,10 +517,10 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
     ivgene1exon2 = HTSeq.GenomicInterval("chr1", 160, 180, "+")
     ivgene2 = HTSeq.GenomicInterval("chr1", 250, 350, "+")
     genes_intervals = [
-        ("gene1", "GeneName1", "exon1", ivgene1, False), # gene1 
-        ("gene1", "GeneName1", "exon1", ivgene1exon1, True), # define gene1 exon1
-        ("gene1", "GeneName1", "exon2", ivgene1exon2, True), # define gene1 exon2, leaving some intron
-        ("gene2", "GeneName2", "exon1", ivgene2, False), # gene2 without exon, ie assume intron
+        ("gene1", "GeneName1", "g1exon1", ivgene1, False), # gene1 
+        ("gene1", "GeneName1", "g1exon1", ivgene1exon1, True), # define gene1 exon1
+        ("gene1", "GeneName1", "g1exon2", ivgene1exon2, True), # define gene1 exon2, leaving some intron
+        ("gene2", "GeneName2", "g2exon1", ivgene2, False), # gene2 without exon, ie assume intron
     ]
     gtf_data = get_dummy_gtf_dump(genes_intervals)
     
@@ -524,8 +569,8 @@ def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
     ivgene1 = HTSeq.GenomicInterval("chr1", 100, 200, "+")
     ivgene2 = HTSeq.GenomicInterval("chr1", 250, 350, "+")
     genes_intervals = [
-        ("gene1", "GeneName1", "exon1", ivgene1, True), # gene1 
-        ("gene2", "GeneName2", "exon1", ivgene2, True), # gene2 
+        ("gene1", "GeneName1", "g1exon1", ivgene1, True), # gene1 
+        ("gene2", "GeneName2", "g2exon1", ivgene2, True), # gene2 
     ]
     gtf_data = get_dummy_gtf_dump(genes_intervals)
     

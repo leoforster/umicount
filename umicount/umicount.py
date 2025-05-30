@@ -115,8 +115,8 @@ class ReadTrack:
     read2_almnt: Any
     umi: Any = field(init=False)
     category: str = ""
-    gene_overlap: list = field(default_factory=list)
-    exon_overlap: list = field(default_factory=list)
+    read1_overlap: dict = field(default_factory=dict)
+    read2_overlap: dict = field(default_factory=dict)
     gene_to_count: str = ""
     exon_to_count: str = ""
 
@@ -136,43 +136,67 @@ class ReadTrack:
         return self.read1_almnt is not None and \
                self.read2_almnt is not None and (self.category == '')
 
-    def find_overlap(self, gfeatures, efeatures):
+    def find_overlap(self, gfeatures, efeatures, eattributes):
         assert self.can_do_overlap()
 
-        gene_ids = set()
-        exon_ids = set()
-        try:
-            # overlap loop as in HTSeq count.py
-            for almnt in [self.read1_almnt, self.read2_almnt]:
-                if almnt is None: continue
+        for almnt, olap in zip( (self.read1_almnt, self.read2_almnt),
+                                (self.read1_overlap, self.read2_overlap) ):
+            if almnt:
 
-                for iv, val in gfeatures[almnt.iv].steps():
-                    gene_ids = gene_ids.union(val)
-                self.gene_overlap = list(gene_ids) # ids of overlapping genes
+                # core set logic for overlap lookup borrowed from HTSeq count.py
+                gene_ids = set(); exon_ids = set()
+                try:
+                    for iv, val in gfeatures[almnt.iv].steps():
+                        gene_ids = gene_ids.union(val)
 
-                for iv, val in efeatures[almnt.iv].steps():
-                    exon_ids = exon_ids.union(val)
-                self.exon_overlap = list(exon_ids) # ids of overlapping exons
+                    for iv, val in efeatures[almnt.iv].steps():
+                        exon_ids = exon_ids.union(val)
 
-        except KeyError:
-            # weird bug where features doesnt contain scaffold chr
-            self.category = '_FAIL'
+                except KeyError:
+                    # features doesnt contain scaffold chr, likely GTF <-> reference mismatch
+                    logger.warning( (f"failed lookup of {self.read1_almnt.read.name}"
+                                     " at {almnt.iv} in GTF features, calling unmapped") )
+                    self.category = '_unmapped'
+                    return self
+
+                # populate gene -> exon overlaps
+                for gid in gene_ids:
+                    olap[gid] = []
+
+                for eid in exon_ids:
+                    e_gid = eattributes[eid][0] # exon's gene ID
+                    olap.setdefault(e_gid, []).append(eid)
+
         return self
 
     def evaluate_overlap(self, eattributes):
         assert self.can_do_overlap()
 
-        if len(self.gene_overlap) == 0: # intergenic
+        # get gene overlaps, prioritizing where r1+r2 both map to exons (pair_hit)
+        pair_hit = [gid for gid in set(self.read1_overlap) & set(self.read2_overlap)
+                    if self.read1_overlap[gid] and self.read2_overlap[gid]]
+
+        if pair_hit:
+            gene_overlap = pair_hit
+            exon_overlap = [eid for gid in pair_hit for eid in \
+                            (self.read1_overlap[gid] + self.read2_overlap[gid])]
+
+        else: # no gene with both reads mapping to exons, use all unique genes
+            gene_overlap = list(set(self.read1_overlap) | set(self.read2_overlap))
+            exon_overlap = [eid for ex in list(self.read1_overlap.values()) + \
+                                          list(self.read2_overlap.values()) for eid in ex]
+
+        # now assign readpairs to gene counts based on overlap
+        if len(gene_overlap) == 0: # intergenic
             self.category = '_no_feature'
 
-        elif len(self.gene_overlap) == 1:
-            self.gene_to_count = self.gene_overlap[0]
-            if len(self.exon_overlap) > 0: # exons of that gene
-                self.exon_to_count = self.exon_overlap[0]
+        elif len(gene_overlap) == 1:
+            self.gene_to_count = gene_overlap[0]
+            if len(exon_overlap) > 0: # exons of that gene
+                self.exon_to_count = exon_overlap[0]
 
         else: # when multiple genes overlap
-            exongenes = {eattributes[eid][0] for eid in self.exon_overlap \
-                         if eid in eattributes} # get gene ids from attribute
+            exongenes = {eattributes[eid][0] for eid in exon_overlap}
 
             # if exon annotated for only 1 of overlapping genes: count it
             if len(exongenes) == 1:
@@ -342,7 +366,7 @@ def parse_bam_and_count(bamfile, gtf_data,
                                           multiple_primary_action=multiple_primary_action)
 
         # extract overlapping genes, exons
-        if readpair.can_do_overlap(): readpair.find_overlap(gfeatures, efeatures)
+        if readpair.can_do_overlap(): readpair.find_overlap(gfeatures, efeatures, eattributes)
         if readpair.can_do_overlap(): readpair.evaluate_overlap(eattributes)
 
         # now count read at appropriate category based on overlap
@@ -467,7 +491,7 @@ def process_bam(bamfile, gtf_data,
 
 
 
-    # print summarized quantities of counted read categories
+    # report summarized quantities of counted read categories
     if sum(ttl.values()) > 0:
         sumstr = f"{os.path.basename(bamfile)}: {ttl['total']} reads"
         sumstr += f", {ttl['uncounted']} uncounted reads ({(ttl['uncounted']/ttl['total'])*100:.2f}%)"
