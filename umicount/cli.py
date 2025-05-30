@@ -125,6 +125,8 @@ def umicount():
                         help="dont deduplicate UMI counts")
     parser.add_argument("--mm_count_primary", action="store_true", default=False,
                         help=( "count primary alignment (BAM flag 0x100) for multimapping reads.") )
+    parser.add_argument("--min_read_mapQ", action="store", type=int, 
+                        help="Minimum mapQ to keep read. Checks for aligned status but not whether mapQ is 255.")
     parser.add_argument("--multiple_primary_action", action="store", default="warn",
                         choices=['warn', 'raise', 'skip'],
                         help=( "how to handle cases when a read has multiple primary alignments: "
@@ -194,6 +196,7 @@ def umicount():
         gtf_data = load_gtf_data(r.gtf, skipgtf=r.GTF_skip_parse) # only need to load once
         process_bam_parallel(bamfiles, filedir, gtf_data, num_workers=r.cores,
                              cols_to_use=basecols, 
+                             min_read_mapQ=min_read_mapQ,
                              count_primary=r.mm_count_primary,
                              multiple_primary_action=r.multiple_primary_action,
                              umi_correct_params=umi_correct_params)

@@ -126,8 +126,10 @@ class ReadTrack:
             parts = self.read2_almnt.read.name.rsplit('_', 1)
         else:
             parts = None
+            self.umi = None
 
-        self.umi = parts[1] if len(parts) == 2 and parts[1] else None
+        if parts:
+            self.umi = parts[1] if len(parts) == 2 and parts[1] else None
 
     def can_do_overlap(self):
         return self.read1_almnt is not None and \
@@ -181,60 +183,97 @@ class ReadTrack:
 
         return self
 
-def extract_first_alignment(bundle, bamfile, count_primary=False, multiple_primary_action='warn'):
+def filter_reads_by_mapQ(bundle, min_read_mapQ=0):
 
-    if not bundle: raise ValueError("empty bundle: no alignments to extract")
+    filtpass = []
+    for r1, r2 in bundle:
 
-    r1_to_count, r2_to_count = bundle[0] # default to first
-    read_category = '' # default value as in ReadTrack definition
+        p1 = r1 if r1 and r1.aligned and r1.qual >= min_read_mapQ else None
+        p2 = r2 if r2 and r2.aligned and r2.qual >= min_read_mapQ else None
 
-    # multimapping readpair
-    if len(bundle) > 1: 
+        if p1 or p2:
+            filtpass.append( (p1, p2) )
 
-        if count_primary:
-            primaries = []
-            for r1, r2 in bundle:
-                p1 = r1 if (r1 and r1.not_primary_alignment is False) else None
-                p2 = r2 if (r2 and r2.not_primary_alignment is False) else None
-                if p1 or p2: # at least one of r1/r2 has primary flag
-                    primaries.append((p1, p2))
+    return filtpass
 
-            if len(primaries) > 1:
-                if multiple_primary_action == 'warn':
-                    rn = r1_to_count.read.name
-                    sys.stderr.write(f'Warning: {bamfile} has {len(primaries)} primary alignments for {rn}')
+def set_multimapper_category(bundle, bamfile, count_primary=False, multiple_primary_action='warn'):
 
-                    # pick an alignment at random, by reverting to 1-element list
-                    primaries = [random.choice(primaries)]
+    if not bundle: raise ValueError("empty bundle: no multimappers")
 
-                elif multiple_primary_action == 'raise':
-                    raise ValueError(f'in {bamfile} found multiple primary alignments:\n{bundle}')
+    # default vals for returned ReadTrack
+    r1_to_count, r2_to_count = bundle[0] 
+    read_category = ''
 
-                elif multiple_primary_action == 'skip':
-                    read_category = '_multimapping'
+    if count_primary:
+        primaries = []
+        for r1, r2 in bundle:
+            p1 = r1 if (r1 and r1.not_primary_alignment is False) else None
+            p2 = r2 if (r2 and r2.not_primary_alignment is False) else None
+            if p1 or p2: # at least one of r1/r2 has primary flag
+                primaries.append((p1, p2))
 
-                else:
-                    raise ValueError(f'invalid value {multiple_primary_action} for multiple_primary_action')
+        if len(primaries) > 1:
+            if multiple_primary_action == 'warn':
+                rn = r1_to_count.read.name
+                sys.stderr.write(f'Warning: {bamfile} has {len(primaries)} primary alignments for {rn}')
 
-            if not primaries: # no primary alignments (or not set by aligner)
+                # pick an alignment at random, reverting to 1-element list
+                primaries = [random.choice(primaries)]
+
+            elif multiple_primary_action == 'raise':
+                raise ValueError(f'in {bamfile} found multiple primary alignments:\n{bundle}')
+
+            elif multiple_primary_action == 'skip':
                 read_category = '_multimapping'
+
             else:
-                r1_to_count, r2_to_count = primaries[0]
-                if r1_to_count is None or r2_to_count is None: # require both
-                    read_category = '_unmapped'
+                raise ValueError(f'invalid value {multiple_primary_action} for multiple_primary_action')
 
-        else: # multimapping but no count_primary: use first pair
+        if not primaries: # no primary alignments (or not set by aligner)
             read_category = '_multimapping'
+        else:
+            r1_to_count, r2_to_count = primaries[0]
 
-    # readpair has single alignment
-    else:
-        if (r1_to_count is None or not r1_to_count.aligned) or \
-           (r2_to_count is None or not r2_to_count.aligned): # either read unaligned
-            read_category = '_unmapped'
+    else: # multimapping but no count_primary: use first pair
+        read_category = '_multimapping'
 
     return ReadTrack(read1_almnt=r1_to_count,
                      read2_almnt=r2_to_count,
                      category=read_category)
+
+
+def set_alignment_category(bundle, bamfile, 
+                           min_read_mapQ=0,
+                           count_primary=False, 
+                           multiple_primary_action='warn'):
+
+    if not bundle: raise ValueError("empty bundle: no alignments to extract")
+
+    # prune by mapQ
+    bundle_mapq_filt = filter_reads_by_mapQ(bundle, min_read_mapQ=min_read_mapQ)
+    if all(r1 is None and r2 is None for r1, r2 in bundle_mapq_filt):
+        return ReadTrack(read1_almnt=None,
+                         read2_almnt=None,
+                         category='_unmapped')
+
+    # multimapping readpair
+    if len(bundle_mapq_filt) > 1: 
+        return set_multimapper_category(bundle_mapq_filt, bamfile, 
+                                        count_primary=count_primary,
+                                        multiple_primary_action=multiple_primary_action)
+
+    # readpair has single alignment
+    else:
+        r1_to_count, r2_to_count = bundle_mapq_filt[0]
+        read_category = ''
+
+        if (r1_to_count is None or not r1_to_count.aligned) or \
+           (r2_to_count is None or not r2_to_count.aligned): # either read unaligned
+            read_category = '_unmapped'
+
+        return ReadTrack(read1_almnt=r1_to_count,
+                         read2_almnt=r2_to_count,
+                         category=read_category)
 
 def umi_correction(umicounts, countratio=2, hamming_threshold=1):
         
@@ -270,6 +309,7 @@ def parse_bam_and_count(bamfile, gtf_data,
                         cols_to_use=None, 
                         count_primary=False,
                         multiple_primary_action='warn',
+                        min_read_mapQ=0,
                         umi_correct_params=None):
 
     assert validate_cols_to_use(cols_to_use)
@@ -296,10 +336,11 @@ def parse_bam_and_count(bamfile, gtf_data,
             totalumis['uncounted'] += 1
             continue
 
-        readpair = extract_first_alignment(bundle, bamfile,
-                                           count_primary=count_primary,
-                                           multiple_primary_action=multiple_primary_action)
-
+        readpair = set_alignment_category(bundle, bamfile,
+                                          min_read_mapQ=0,
+                                          count_primary=count_primary,
+                                          multiple_primary_action=multiple_primary_action)
+ 
         # extract overlapping genes, exons
         if readpair.can_do_overlap(): readpair.find_overlap(gfeatures, efeatures)
         if readpair.can_do_overlap(): readpair.evaluate_overlap(eattributes)
