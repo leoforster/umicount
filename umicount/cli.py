@@ -1,6 +1,7 @@
 """CLI entrypoints for umicount"""
 
 import argparse
+import logging
 import sys
 import os
 
@@ -17,6 +18,30 @@ def existing_dir(path):
         raise argparse.ArgumentTypeError(f"Folder '{path}' does not exist.")
     return path
 
+def configure_logging(logfile_path):
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
+
+    # two handlers on the root logger: first for info
+    if logfile_path in (sys.stdout, None, "-", ""):
+        fh = logging.StreamHandler(sys.stdout)
+    else:
+        fh = logging.FileHandler(logfile_path, mode='w')
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(fmt)
+    root.addHandler(fh)
+
+    # second handler for errors
+    eh = logging.StreamHandler(sys.stderr)
+    eh.setLevel(logging.WARNING)
+    eh.setFormatter(fmt)
+    root.addHandler(eh)
+
+    return root
+
 def umiextract():
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("-1", "--read1", action="store", nargs="+", 
@@ -29,6 +54,8 @@ def umiextract():
                         help="Directory to output processed fastq files")
     parser.add_argument("-c", "--cores", action="store", type=int,
                         help="Number of cores for processing R1/R2: each core processes 1 sample")
+    parser.add_argument("-l", "--logfile", action="store", default=None,
+                        help="Path to log file, defaults to standard output (sys.stdout)")
     parser.add_argument("--umilen", action="store", type=int, default=8,
                         help="UMI length in bp")
     parser.add_argument("-u", "--only_umi", action="store_true", default=False,
@@ -39,11 +66,11 @@ def umiextract():
                         help="post-UMI trailing sequence, commonly GGG")
     parser.add_argument("-s", "--search_region", action="store", type=int, default=-1,
                         help="Sequence segment within which to search for UMI, as a bp threshold")
-    parser.add_argument("-l", "--min_seqlen", action="store", type=int, default=-1,
-                        help="Threshold for minimum remaining sequence length after trimming UMI")
     parser.add_argument("-f", "--fuzzy_umi", action="store_true", default=False, 
                         help=( "Enable mismatches/indels in pre/pos-UMI sequence detection, " 
                                "requires python regex library to be installed") )
+    parser.add_argument("--min_seqlen", action="store", type=int, default=-1,
+                        help="Threshold for minimum remaining sequence length after trimming UMI")
     parser.add_argument("--anchor_mismatches", action="store", type=int, default=2, 
                         help="Max mismatches allowed in anchor in fuzzy UMI extraction")
     parser.add_argument("--anchor_indels", action="store", type=int, default=1, 
@@ -53,9 +80,17 @@ def umiextract():
 
     r = parser.parse_args()
 
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+
+    # set up logging
+    logger = configure_logging(r.logfile)
+
     if r.read2:
         if len(r.read1) != len(r.read2):
-            sys.exit("if giving R2, number of R2 files must match R1")
+            logger.error('umiextract requires the number of R2 files match R1 if giving R2 (-2, --read2)')
+            sys.exit()
 
     # check implicity fuzzy_umi usage
     if r.fuzzy_umi == False:
@@ -63,7 +98,7 @@ def umiextract():
         fuzzy_used = [i for i in fuzzy_args if i in sys.argv]
 
         if len(fuzzy_used) > 0:
-            print(f'Note: supplied {", ".join(fuzzy_used)} without --fuzzy_umi, setting --fuzzy_umi=True')
+            logger.info(f"Note: supplied {", ".join(fuzzy_used)} without --fuzzy_umi, setting --fuzzy_umi=True")
             r.fuzzy_umi = True
 
     # set up fuzzy matching
@@ -76,7 +111,8 @@ def umiextract():
             import regex
             from rapidfuzz.distance import Hamming
         except ModuleNotFoundError:
-            sys.exit('requires both regex and rapidfuzz package to enable fuzzy UMI detection')
+            logger.error('umiextract requires both regex and rapidfuzz packages for fuzzy UMI detection')
+            sys.exit()
 
     # collate R1-R2 pairs for threading
     filedir = os.path.abspath(os.path.expanduser(r.output_dir))
@@ -118,6 +154,8 @@ def umicount():
                         help="Directory to output counts matrices, named as umicounts.*.tsv")
     parser.add_argument("-c", "--cores", action="store", type=int,
                         help="Number of cores for processing BAMs: each core processes 1 sample")
+    parser.add_argument("-l", "--logfile", action="store", default=None,
+                        help="Path to log file, defaults to standard output (sys.stdout)")
     parser.add_argument("-g", "--gtf", type=existing_file, help="input GTF file (ensembl format)")
     parser.add_argument("--GTF_dump", type=existing_dir, default=None, help="File path to dump parsed GTF data")
     parser.add_argument("--GTF_skip_parse", type=existing_file, default=None, help="Path to dumped GTF data")
@@ -145,11 +183,20 @@ def umicount():
     
     r = parser.parse_args()
 
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+
+    # set up logging
+    logger = configure_logging(r.logfile)
+
     if r.gtf is None and r.GTF_skip_parse is None:
-        sys.exit('require one of --gtf, --GTF_skip_parse')
+        logger.error('umicount requires one of --gtf, --GTF_skip_parse')
+        sys.exit()
 
     if (r.bams is None) and not (r.gtf and r.GTF_dump):
-        sys.exit('no input files found, skipping input only valid with --gtf and --GTF_dump')
+        logger.error('umicount found empty input (--bams), skipping input is only valid with --gtf and --GTF_dump')
+        sys.exit()
 
     # case when parsing GTF and pickling contents
     if r.gtf and r.GTF_dump:
@@ -170,7 +217,7 @@ def umicount():
         umicorr_used = [i for i in umicorr_args if i in sys.argv]
 
         if len(umicorr_used) > 0:
-            print(f'Note: supplied {", ".join(umicorr_used)} without --UMI_correct, setting --UMI_correct=True')
+            print(f"Note: supplied {", ".join(umicorr_used)} without --UMI_correct, setting --UMI_correct=True")
             r.UMI_correct = True
 
     # set up UMI correction
@@ -182,7 +229,8 @@ def umicount():
         try:
             from rapidfuzz.distance import Hamming
         except ModuleNotFoundError:
-            sys.exit('requires rapidfuzz package to enable UMI correction')
+            logger.error('umicount requires the rapidfuzz package for UMI correction')
+            sys.exit()
 
     # collate input and output files in filepairs
     filedir = os.path.abspath(os.path.expanduser(r.output_dir))

@@ -6,6 +6,9 @@ import HTSeq as htseq
 from multiprocessing import Pool
 from contextlib import nullcontext
 
+import logging
+logger = logging.getLogger(__name__)
+
 try:
     from rapidfuzz.distance import Hamming
 except: # this is checked in cli.py
@@ -135,7 +138,7 @@ def process_fastq(paths, outnames, umi_len,
 
             # check for duplicated R1 readname, R2 is checked for consistency below
             if entry1.name in readnames:
-                sys.exit('duplicate R1 name found at read number %s' %readcount)
+                raise ValueError(f"duplicate R1 name ({entry1.name}) found at read number {readcount}")
             else:
                 readnames.add(entry1.name)
 
@@ -155,7 +158,8 @@ def process_fastq(paths, outnames, umi_len,
             if entry2 is not None:
                 entry2.name, _, _ = entry2.name.partition(' ')
                 if entry1.name != entry2.name:
-                    sys.exit('readname mismatch in R1 and R2 at read number %s' %readcount)
+                    raise ValueError(( f"readname mismatch in R1 ({entry1.name}) and "
+                                       f"R2 ({entry2.name}) at read number {readcount}" ))
                 if umi:
                     entry2.name += '_' + umi
 
@@ -171,12 +175,12 @@ def process_fastq(paths, outnames, umi_len,
                 reads_written += 1
 
     if readcount > 0:
-        print( (f"{os.path.basename(paths[0])}: {readcount} reads, " 
-                f"{umicount} with UMI ({(umicount/readcount)*100:.2f}%), "
-                f"{reads_written} written "
-                f"({((readcount-reads_written)/readcount)*100:.2f}% skipped)") )
+        logger.info( (f"{os.path.basename(paths[0])}: {readcount} reads, " 
+                      f"{umicount} with UMI ({(umicount/readcount)*100:.2f}%), "
+                      f"{reads_written} written "
+                      f"({((readcount-reads_written)/readcount)*100:.2f}% skipped)") )
     else:
-        print(f"empty input file")
+        logger.error(f"empty input file")
     
     r1_out.close()
     if r2_out:
@@ -190,7 +194,8 @@ def _fastq_worker(task_args):
         process_fastq(infile, outfile, **kwargs)
     except Exception as e:
         new_msg = f"in {infile}:\n{e}"
-        raise type(e)(new_msg) from e
+        logger.error(new_msg, exc_info=True)
+        raise
     
 def process_fastq_parallel(filepairs, umi_len, num_workers=4,
                            only_umi=False, 

@@ -143,7 +143,7 @@ def test_process_fastq_duplicate_read_name():
 
         write_fastq(r1_path, r1_reads)
 
-        with pytest.raises(SystemExit):  # Should exit due to duplicate read name
+        with pytest.raises(ValueError):  # Should error due to duplicate read name
             process_fastq((r1_path, None), (r1_out_path, None), 
                           umi_len=4, only_umi=False, fuzzy_umi_params=None)
 
@@ -167,7 +167,7 @@ def test_process_fastq_mismatched_read_names():
         write_fastq(r1_path, r1_reads)
         write_fastq(r2_path, r2_reads)
 
-        with pytest.raises(SystemExit):  # Should exit due to mismatched read names
+        with pytest.raises(ValueError):  # Should error due to mismatched read names
             process_fastq((r1_path, r2_path), (r1_out_path, r2_out_path), 
                           umi_len=4, only_umi=False, fuzzy_umi_params=None)
 

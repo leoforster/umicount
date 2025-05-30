@@ -19,30 +19,30 @@ except: # this is checked in cli.py
 def validate_cols_to_use(cols):
     # because cols_to_use values direct downstream logic inplace of function args
     if cols is None:
-        print('malformed columns: columns set is empty')
+        logger.error(f"malformed columns {cols}: columns set is empty")
         return False
 
     valid_fields = ['UI', 'UE', 'RI', 'RE', 'D', 'R', 'U']
     if any(col not in valid_fields for col in cols):
-        print('malformed columns contains invalid values (expected %s)' %valid_fields)
+        logger.error(f"malformed columns {cols} contains invalid values (expected {valid_fields})")
         return False
 
     has_RIE = 'RI' in cols or 'RE' in cols
     has_R = 'R' in cols
     if has_RIE and has_R:
-        print('malformed columns contains (RE, RI) and R')
+        logger.error(f"malformed columns {cols} contains (RE, RI) and R")
         return False
     if has_RIE and not ('RI' in cols and 'RE' in cols):
-        print('malformed columns contains RE or RI but not both')
+        logger.error(f"malformed columns {cols} contains RE or RI but not both")
         return False
 
     has_UIE = 'UI' in cols or 'UE' in cols
     has_U = 'U' in cols
     if has_UIE and has_U:
-        print('malformed columns contains (UE, UI) and U')
+        logger.error(f"malformed columns {cols} contains (UE, UI) and U")
         return False
     if has_UIE and not ('UI' in cols and 'UE' in cols):
-        print('malformed columns contains UE or UI but not both')
+        logger.error(f"malformed columns {cols} contains UE or UI but not both")
         return False
 
     return True
@@ -65,7 +65,7 @@ def parse_gtf(gtffile, exon_attr=['gene_id', 'gene_name', 'exon_number'], gene_a
                 try:
                     feature_id = f.attr[id_attribute]
                 except KeyError:
-                    raise ValueError("%s does not contain a '%s' attribute" %(f.name, id_attribute))
+                    raise ValueError(f"{f.name} does not contain a '{id_attribute}' attribute")
 
                 efeatures[f.iv] += feature_id
                 eattributes[f.attr[id_attribute]] = [f.attr.get(attr, '') \
@@ -76,16 +76,14 @@ def parse_gtf(gtffile, exon_attr=['gene_id', 'gene_name', 'exon_number'], gene_a
                 try:
                     feature_id = f.attr[id_attribute]
                 except KeyError:
-                    raise ValueError("%s does not contain a '%s' attribute" %(f.name, id_attribute))
+                    raise ValueError(f"{f.name} does not contain a '{id_attribute}' attribute")
 
                 # store raw/umi for gene counts, intron, and exon
                 gfeatures[f.iv] += feature_id
                 gattributes[feature_id] = [f.attr.get(attr, '') \
                                            for attr in additional_attributes[f.type]]
     except:
-        sys.stderr.write(
-            "Error occured when processing GFF file (%s):\n" %gff.get_line_number_string())
-        raise
+        raise ValueError(f"Error occured when processing GFF file ({gff.get_line_number_string()}):\n")
 
     return (gfeatures, efeatures, gattributes, eattributes)
 
@@ -103,10 +101,10 @@ def load_gtf_data(gtffile, skipgtf=None, dumpgtf=None):
         return read_gtf_dump(skipgtf)
 
     else: # parse anew
-        print('Parsing GTF file:', gtffile)
+        logger.info(f"Parsing GTF file: {gtffile}")
         gtf_data = parse_gtf(gtffile)
         if dumpgtf:
-            print('Dumping parsed GTF data to:', dumpgtf)
+            logger.info(f"Dumping parsed GTF data to: {dumpgtf}")
             dump_gtf(dumpgtf, gtf_data)
         return gtf_data
 
@@ -216,19 +214,19 @@ def set_multimapper_category(bundle, bamfile, count_primary=False, multiple_prim
         if len(primaries) > 1:
             if multiple_primary_action == 'warn':
                 rn = r1_to_count.read.name
-                sys.stderr.write(f'Warning: {bamfile} has {len(primaries)} primary alignments for {rn}')
+                logger.warning(f"{bamfile} has {len(primaries)} primary alignments for {rn}")
 
                 # pick an alignment at random, reverting to 1-element list
                 primaries = [random.choice(primaries)]
 
             elif multiple_primary_action == 'raise':
-                raise ValueError(f'in {bamfile} found multiple primary alignments:\n{bundle}')
+                raise ValueError(f"in {bamfile} found multiple primary alignments:\n{bundle}")
 
             elif multiple_primary_action == 'skip':
                 read_category = '_multimapping'
 
             else:
-                raise ValueError(f'invalid value {multiple_primary_action} for multiple_primary_action')
+                raise ValueError(f"invalid value {multiple_primary_action} for multiple_primary_action")
 
         if not primaries: # no primary alignments (or not set by aligner)
             read_category = '_multimapping'
@@ -444,7 +442,7 @@ def write_counts_for_col(filecounts, col, outdir, geneorder, sep='\t'):
         lines.append(sep.join([g] + linevals))
 
     ext = 'tsv' if sep == '\t' else 'csv' if sep == ',' else 'txt'
-    with open(os.path.join(outdir, f'umicounts.{col}.{ext}'), 'w') as f:
+    with open(os.path.join(outdir, f"umicounts.{col}.{ext}"), 'w') as f:
         f.write('\n'.join(lines))
 
 def process_bam(bamfile, gtf_data,
@@ -476,9 +474,9 @@ def process_bam(bamfile, gtf_data,
         for i in cols_to_use:
             sumstr += f", {ttl[i]} {i}-reads ({(ttl[i]/ttl['total'])*100:.2f}%)"
         if umi_correct_params: sumstr += f", {ttl['corrected']} counts in corrected UMIs "
-        print(sumstr)
+        logger.info(sumstr)
     else:
-        print(f"empty BAM file")
+        raise ValueError(f"empty BAM file")
 
     return umicount
 
@@ -490,7 +488,8 @@ def _bam_worker(task_args):
         umicount = process_bam(infile, gtf_data, **kwargs)
     except Exception as e:
         new_msg = f"in {infile}:\n{e}"
-        raise type(e)(new_msg) from e
+        logger.error(new_msg, exc_info=True)
+        raise
 
     return infile, umicount
 
