@@ -446,7 +446,8 @@ def write_counts_for_col(filecounts, col, outdir, geneorder, sep='\t'):
         f.write('\n'.join(lines))
 
 def process_bam(bamfile, gtf_data,
-                cols_to_use=None, 
+                cols_to_use=None,
+                min_read_mapQ=0,
                 count_primary=False,
                 multiple_primary_action='warn',
                 umi_correct_params=None):
@@ -457,8 +458,9 @@ def process_bam(bamfile, gtf_data,
     _, _, gattributes, _ = gtf_data
 
     # parsing BAM and count reads
-    umicount, ttl = parse_bam_and_count(bamfile, gtf_data, 
-                                        cols_to_use=cols_to_use, 
+    umicount, ttl = parse_bam_and_count(bamfile, gtf_data,
+                                        cols_to_use=cols_to_use,
+                                        min_read_mapQ=min_read_mapQ,
                                         count_primary=count_primary,
                                         multiple_primary_action=multiple_primary_action,
                                         umi_correct_params=umi_correct_params)
@@ -491,7 +493,8 @@ def _bam_worker(task_args):
     return infile, umicount
 
 def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
-                         cols_to_use=None, 
+                         cols_to_use=None,
+                         min_read_mapQ=0,
                          count_primary=False,
                          multiple_primary_action='warn',
                          umi_correct_params=None):
@@ -503,6 +506,7 @@ def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
     # bundle constant args
     kwargs = dict(
         cols_to_use=cols_to_use,
+        min_read_mapQ=min_read_mapQ,
         count_primary=count_primary,
         multiple_primary_action=multiple_primary_action,
         umi_correct_params=umi_correct_params
