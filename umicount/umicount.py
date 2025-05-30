@@ -7,6 +7,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+import logging
+logger = logging.getLogger(__name__)
+
 import HTSeq
 try:
     from rapidfuzz.distance import Hamming
@@ -15,7 +18,7 @@ except: # this is checked in cli.py
 
 def validate_cols_to_use(cols):
     # because cols_to_use values direct downstream logic inplace of function args
-    if cols is None: 
+    if cols is None:
         print('malformed columns: columns set is empty')
         return False
 
@@ -201,7 +204,7 @@ def set_multimapper_category(bundle, bamfile, count_primary=False, multiple_prim
     if not bundle: raise ValueError("empty bundle: no multimappers")
 
     # default vals for returned ReadTrack
-    r1_to_count, r2_to_count = bundle[0] 
+    r1_to_count, r2_to_count = bundle[0]
     read_category = ''
 
     if count_primary:
@@ -242,9 +245,9 @@ def set_multimapper_category(bundle, bamfile, count_primary=False, multiple_prim
                      category=read_category)
 
 
-def set_alignment_category(bundle, bamfile, 
+def set_alignment_category(bundle, bamfile,
                            min_read_mapQ=0,
-                           count_primary=False, 
+                           count_primary=False,
                            multiple_primary_action='warn'):
 
     if not bundle: raise ValueError("empty bundle: no alignments to extract")
@@ -257,26 +260,25 @@ def set_alignment_category(bundle, bamfile,
                          category='_unmapped')
 
     # multimapping readpair
-    if len(bundle_mapq_filt) > 1: 
-        return set_multimapper_category(bundle_mapq_filt, bamfile, 
+    if len(bundle_mapq_filt) > 1:
+        return set_multimapper_category(bundle_mapq_filt, bamfile,
                                         count_primary=count_primary,
                                         multiple_primary_action=multiple_primary_action)
 
     # readpair has single alignment
     else:
-        r1_to_count, r2_to_count = bundle_mapq_filt[0]
-        read_category = ''
+        rt = ReadTrack(read1_almnt=bundle_mapq_filt[0][0],
+                       read2_almnt=bundle_mapq_filt[0][1],
+                       category='')
 
-        if (r1_to_count is None or not r1_to_count.aligned) or \
-           (r2_to_count is None or not r2_to_count.aligned): # either read unaligned
-            read_category = '_unmapped'
+        if (rt.read1_almnt is None or not rt.read1_almnt.aligned) or \
+           (rt.read2_almnt is None or not rt.read2_almnt.aligned): # either read unaligned
+            rt.category = '_unmapped'
 
-        return ReadTrack(read1_almnt=r1_to_count,
-                         read2_almnt=r2_to_count,
-                         category=read_category)
+        return rt
 
 def umi_correction(umicounts, countratio=2, hamming_threshold=1):
-        
+
     # UMIs sorted by decreasing counts
     umisort = sorted(umicounts.items(), key=lambda x: x[1], reverse=True)
     corrected = {}
@@ -284,7 +286,7 @@ def umi_correction(umicounts, countratio=2, hamming_threshold=1):
     while umisort:
         seed, seed_count = umisort.pop(0) # highest counts UMI
         corrected[seed] = seed_count
-        if seed_count <= 0: 
+        if seed_count <= 0:
             raise ValueError(f"UMI ({seed}) has 0 or fewer counts")
 
         # iterate backwards from low to high UMI counts
@@ -296,7 +298,7 @@ def umi_correction(umicounts, countratio=2, hamming_threshold=1):
 
             if ((countratio * candidate_count) - 1) > seed_count:
                 break # can break since remaining UMIs counts are higher
-                
+
             if Hamming.distance(seed, candidate, pad=False) <= hamming_threshold:
                 corrected[seed] += candidate_count
                 umisort.pop(i)
@@ -304,9 +306,9 @@ def umi_correction(umicounts, countratio=2, hamming_threshold=1):
             i -= 1
 
     return corrected
-            
-def parse_bam_and_count(bamfile, gtf_data, 
-                        cols_to_use=None, 
+
+def parse_bam_and_count(bamfile, gtf_data,
+                        cols_to_use=None,
                         count_primary=False,
                         multiple_primary_action='warn',
                         min_read_mapQ=0,
@@ -372,7 +374,7 @@ def parse_bam_and_count(bamfile, gtf_data,
                     gcounts[g]['D'] = umisum - umilen
                 else:
                     gcounts[g]['U'] = umisum
-        else: 
+        else:
             for g in geneumis.keys():
                 for uie in ['UI', 'UE']:
                     umisum = sum(geneumis[g][uie].values())
@@ -387,7 +389,7 @@ def parse_bam_and_count(bamfile, gtf_data,
     else: # with UMI correction
         ct = umi_correct_params['countratio_threshold']
         ht = umi_correct_params['hamming_threshold']
-        
+
         if combine_unspliced:
             for g in geneumis.keys():
                 UIE_corrected = umi_correction(geneumis[g]['U'], countratio=ct, hamming_threshold=ht)
@@ -440,7 +442,7 @@ def write_counts_for_col(filecounts, col, outdir, geneorder, sep='\t'):
             linevals.append( str( filecounts.get(fname, {}).get(g, {}).get(col, 0))) # defaults to 0 if missing
 
         lines.append(sep.join([g] + linevals))
-    
+
     ext = 'tsv' if sep == '\t' else 'csv' if sep == ',' else 'txt'
     with open(os.path.join(outdir, f'umicounts.{col}.{ext}'), 'w') as f:
         f.write('\n'.join(lines))
@@ -517,7 +519,7 @@ def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
     with Pool(num_workers) as pool:
         results = pool.map(_bam_worker, tasks)
 
-    # output counts table to file 
+    # output counts table to file
     filecounts = {fname:umicounts for fname, umicounts in results} # dict of filename:umicounts
     for c in cols_to_use:
         write_counts_for_col(filecounts, c, outdir, list(gtf_data[2].keys()), sep='\t') # gtf_data[2] is gattributes

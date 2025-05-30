@@ -151,9 +151,6 @@ def umicount():
     if (r.bams is None) and not (r.gtf and r.GTF_dump):
         sys.exit('no input files found, skipping input only valid with --gtf and --GTF_dump')
 
-    if r.multiple_primary_action not in ['warn', 'skip', 'raise']:
-        sys.exit(f'invalid value {multiple_primary_action} for --multiple_primary_action')
-
     # case when parsing GTF and pickling contents
     if r.gtf and r.GTF_dump:
         load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump)
