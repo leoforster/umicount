@@ -25,7 +25,7 @@ class DummyAlignment:
         self.aligned = aligned
         self.not_primary_alignment = not_primary_alignment
         self.iv = iv
-        self.qual = qual
+        self.aQual = qual
 
 def dummy_pair_SAM_alignments_factory(bundles):
     """
