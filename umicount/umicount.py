@@ -188,8 +188,8 @@ def filter_reads_by_mapQ(bundle, min_read_mapQ=0):
     filtpass = []
     for r1, r2 in bundle:
 
-        p1 = r1 if r1 and r1.aligned and r1.qual >= min_read_mapQ else None
-        p2 = r2 if r2 and r2.aligned and r2.qual >= min_read_mapQ else None
+        p1 = r1 if r1 and r1.aligned and r1.aQual >= min_read_mapQ else None
+        p2 = r2 if r2 and r2.aligned and r2.aQual >= min_read_mapQ else None
 
         if p1 or p2:
             filtpass.append( (p1, p2) )
