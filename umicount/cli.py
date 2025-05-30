@@ -196,7 +196,7 @@ def umicount():
         gtf_data = load_gtf_data(r.gtf, skipgtf=r.GTF_skip_parse) # only need to load once
         process_bam_parallel(bamfiles, filedir, gtf_data, num_workers=r.cores,
                              cols_to_use=basecols, 
-                             min_read_mapQ=min_read_mapQ,
+                             min_read_mapQ=r.min_read_mapQ,
                              count_primary=r.mm_count_primary,
                              multiple_primary_action=r.multiple_primary_action,
                              umi_correct_params=umi_correct_params)
