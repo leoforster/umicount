@@ -98,7 +98,7 @@ def umiextract():
         fuzzy_used = [i for i in fuzzy_args if i in sys.argv]
 
         if len(fuzzy_used) > 0:
-            logger.info(f"Note: supplied {", ".join(fuzzy_used)} without --fuzzy_umi, setting --fuzzy_umi=True")
+            logger.info(f"Note: supplied {', '.join(fuzzy_used)} without --fuzzy_umi, setting --fuzzy_umi=True")
             r.fuzzy_umi = True
 
     # set up fuzzy matching
@@ -217,7 +217,7 @@ def umicount():
         umicorr_used = [i for i in umicorr_args if i in sys.argv]
 
         if len(umicorr_used) > 0:
-            print(f"Note: supplied {", ".join(umicorr_used)} without --UMI_correct, setting --UMI_correct=True")
+            print(f"Note: supplied {', '.join(umicorr_used)} without --UMI_correct, setting --UMI_correct=True")
             r.UMI_correct = True
 
     # set up UMI correction
