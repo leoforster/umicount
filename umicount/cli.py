@@ -159,11 +159,10 @@ def umicount():
     parser.add_argument("-g", "--gtf", type=existing_file, help="input GTF file (ensembl format)")
     parser.add_argument("--GTF_dump", type=existing_dir, default=None, help="File path to dump parsed GTF data")
     parser.add_argument("--GTF_skip_parse", type=existing_file, default=None, help="Path to dumped GTF data")
-    parser.add_argument("--no_dedup", action="store_true", default=False,
-                        help="dont deduplicate UMI counts")
+    parser.add_argument("--no_dedup", action="store_true", default=False, help="dont deduplicate UMI counts")
     parser.add_argument("--mm_count_primary", action="store_true", default=False,
                         help=( "count primary alignment (BAM flag 0x100) for multimapping reads.") )
-    parser.add_argument("--min_read_mapQ", action="store", type=int, 
+    parser.add_argument("--min_read_mapQ", action="store", type=int, default=0,
                         help="Minimum mapQ to keep read. Checks for aligned status but not whether mapQ is 255.")
     parser.add_argument("--multiple_primary_action", action="store", default="warn",
                         choices=['warn', 'raise', 'skip'],
