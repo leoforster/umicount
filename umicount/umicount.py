@@ -538,7 +538,9 @@ def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
         min_read_mapQ=min_read_mapQ,
         count_primary=count_primary,
         multiple_primary_action=multiple_primary_action,
-        umi_correct_params=umi_correct_params
+        umi_correct=True if umi_correct_params else False,
+        countratio_threshold=umi_correct_params['countratio_threshold'] if umi_correct_params else 2,
+        hamming_threshold=umi_correct_params['hamming_threshold'] if umi_correct_params else 1
     )
 
     # map the worker over the filepairs
