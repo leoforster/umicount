@@ -201,6 +201,7 @@ def umicount():
     # case when parsing GTF and pickling contents
     if r.gtf and r.GTF_dump:
         load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump)
+        sys.exit()
 
     # populate read types to count (as columns)
     basecols = []
