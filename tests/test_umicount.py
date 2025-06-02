@@ -135,7 +135,7 @@ def test_filter_aligned_reads():
     assert bd == [(aln3, aln4)]
 
     # Case 4: readpair fails mapQ.
-    bundle = [(aln1, aln1)] # these fail as mapQ==0
+    bundle = [(aln1, aln2)] # these fail as mapQ==0
     bd = filter_aligned_reads(bundle, min_read_mapQ=1)
     assert bd == []
 
