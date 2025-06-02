@@ -155,7 +155,7 @@ class ReadTrack:
                 except KeyError:
                     # features doesnt contain scaffold chr, likely GTF <-> reference mismatch
                     logger.warning( (f"failed lookup of {self.read1_almnt.read.name}"
-                                     " at {almnt.iv} in GTF features, calling unmapped") )
+                                     f" at {almnt.iv} in GTF features, calling unmapped") )
                     self.category = '_unmapped'
                     return self
 
@@ -256,6 +256,9 @@ def set_multimapper_category(bundle, bamfile, count_primary=False, multiple_prim
             read_category = '_multimapping'
         else:
             r1_to_count, r2_to_count = primaries[0]
+            if (r1_to_count is None or not r1_to_count.aligned) or \
+               (r2_to_count is None or not r2_to_count.aligned): # either read unaligned
+                rt.category = '_unmapped'
 
     else: # multimapping but no count_primary: use first pair
         read_category = '_multimapping'
