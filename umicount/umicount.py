@@ -238,8 +238,9 @@ def filter_aligned_reads(bundle, min_read_mapQ=0):
 
     filtpass = []
     for r1, r2 in bundle:
-        p1 = r1 if r1 and r1.aligned and r1.aQual >= min_read_mapQ else None
-        p2 = r2 if r2 and r2.aligned and r2.aQual >= min_read_mapQ else None
+
+        p1 = r1 if r1 and getattr(r1, 'aligned', False) and getattr(r1, 'aQual', -1) >= min_read_mapQ else None
+        p2 = r2 if r2 and getattr(r1, 'aligned', False) and getattr(r2, 'aQual', -1) >= min_read_mapQ else None
         if p1 or p2: # at least one of r1/r2 is aligned and passes mapQ
             filtpass.append( (p1, p2) )
 
@@ -256,8 +257,8 @@ def set_multimapper_category(bundle, bamfile, count_primary=False, multiple_prim
     if count_primary:
         primaries = []
         for r1, r2 in bundle:
-            p1 = r1 if (r1 and r1.not_primary_alignment is False) else None
-            p2 = r2 if (r2 and r2.not_primary_alignment is False) else None
+            p1 = r1 if (r1 and getattr(r1, 'not_primary_alignment', True) is False) else None
+            p2 = r2 if (r2 and getattr(r2, 'not_primary_alignment', True) is False) else None
             if p1 or p2: # at least one of r1/r2 has primary flag
                 primaries.append((p1, p2))
 
@@ -282,13 +283,11 @@ def set_multimapper_category(bundle, bamfile, count_primary=False, multiple_prim
             read_category = ReadCategory.MULTIMAPPING
         else:
             r1_to_count, r2_to_count = primaries[0]
-            if (r1_to_count is None or not r1_to_count.aligned) or \
-               (r2_to_count is None or not r2_to_count.aligned): # either read unaligned
-                read_category = ReadCategory.UNMAPPED
 
     else: # multimapping but no count_primary: use first pair
         read_category = ReadCategory.MULTIMAPPING
 
+    # in set_alignment_category we check whether reads are aligned/unique
     return ReadTrack(read1_almnt=r1_to_count,
                      read2_almnt=r2_to_count,
                      category=read_category)
@@ -303,15 +302,15 @@ def set_alignment_category(bundle, bamfile, config: ReadCountConfig):
 
     # if none of the bundle has reads aligned in a proper pair, its _unmapped
     if (not aread_bundle) or all(r1 is None or r2 is None for r1, r2 in aread_bundle):
-        return ReadTrack(read1_almnt=bundle[0][0], # preserve readname UMI information
-                         read2_almnt=bundle[0][1],
-                         category=ReadCategory.UNMAPPED)
+        rt = ReadTrack(read1_almnt=bundle[0][0], # preserve readname UMI information
+                       read2_almnt=bundle[0][1],
+                       category=ReadCategory.UNMAPPED)
 
     # multimapping readpair
-    if len(aread_bundle) > 1:
-        return set_multimapper_category(aread_bundle, bamfile,
-                                        count_primary=config.count_primary,
-                                        multiple_primary_action=config.multiple_primary_action)
+    elif len(aread_bundle) > 1:
+        rt = set_multimapper_category(aread_bundle, bamfile,
+                                      count_primary=config.count_primary,
+                                      multiple_primary_action=config.multiple_primary_action)
 
     # readpair has single alignment
     else:
@@ -319,11 +318,12 @@ def set_alignment_category(bundle, bamfile, config: ReadCountConfig):
                        read2_almnt=aread_bundle[0][1],
                        category=ReadCategory.UNIQUE)
 
-        if (rt.read1_almnt is None or not rt.read1_almnt.aligned) or \
-           (rt.read2_almnt is None or not rt.read2_almnt.aligned): # either read unaligned
-            rt.category = ReadCategory.UNMAPPED
+    # generic check over alignment status
+    if (rt.read1_almnt is None or not getattr(rt.read1_almnt, 'aligned', False)) or \
+       (rt.read2_almnt is None or not getattr(rt.read2_almnt, 'aligned', False)): # either read unaligned
+        rt.category = ReadCategory.UNMAPPED
 
-        return rt
+    return rt
 
 def umi_correction(umicounts, countratio=2, hamming_threshold=1):
 
