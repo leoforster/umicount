@@ -180,8 +180,8 @@ class ReadTrack:
 
                 except KeyError:
                     # features doesnt contain scaffold chr, likely GTF <-> reference mismatch
-                    logger.warning( (f"failed lookup of {self.read1_almnt.read.name}"
-                                     f" at {almnt.iv} in GTF features, calling unmapped") )
+                    logger.warning( (f"failed lookup of read: {self.read1_almnt.read.name}"
+                                     f" at interval: {almnt.iv} in GTF features, calling unmapped") )
                     self.category = ReadCategory.UNMAPPED
                     return self
 
@@ -239,8 +239,8 @@ def filter_aligned_reads(bundle, min_read_mapQ=0):
     filtpass = []
     for r1, r2 in bundle:
 
-        p1 = r1 if r1 and getattr(r1, 'aligned', False) and getattr(r1, 'aQual', -1) >= min_read_mapQ else None
-        p2 = r2 if r2 and getattr(r1, 'aligned', False) and getattr(r2, 'aQual', -1) >= min_read_mapQ else None
+        p1 = r1 if r1 and getattr(r1, 'aligned', False) and (getattr(r1, 'aQual', -1) >= min_read_mapQ) else None
+        p2 = r2 if r2 and getattr(r1, 'aligned', False) and (getattr(r2, 'aQual', -1) >= min_read_mapQ) else None
         if p1 or p2: # at least one of r1/r2 is aligned and passes mapQ
             filtpass.append( (p1, p2) )
 
