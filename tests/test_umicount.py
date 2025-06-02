@@ -4,6 +4,8 @@ import HTSeq
 from umicount.umicount import (
     parse_gtf,
     ReadTrack,
+    ReadCountConfig,
+    ReadCategory,
     set_alignment_category,
     filter_aligned_reads,
     parse_bam_and_count
@@ -138,10 +140,11 @@ def test_filter_aligned_reads():
     assert bd == []
 
     # Case 5: like Case 4 but checking ReadTrack.cateogory 
-    rt = set_alignment_category(bundle, bamfile="test", min_read_mapQ=1)
+    rt = set_alignment_category(bundle, bamfile="test", 
+                                config=ReadCountConfig(min_read_mapQ=1))
     assert rt.read1_almnt is not None
     assert rt.read2_almnt is not None
-    assert rt.category == '_unmapped'
+    assert rt.category == ReadCategory.UNMAPPED
 
 def test_set_alignment_category():
     """
@@ -152,26 +155,29 @@ def test_set_alignment_category():
     aln1 = DummyAlignment("readC_UMI", True, False, iv, 0)
     aln2 = DummyAlignment("readC_UMI", True, False, iv, 0)
     bundle = [(aln1, aln2)]
-    rt = set_alignment_category(bundle, bamfile="test")
-    assert rt.category == ""
+    rt = set_alignment_category(bundle, bamfile="test", 
+                                config=ReadCountConfig())
+    assert rt.category == ReadCategory.UNIQUE
     assert rt.read1_almnt.read.name == "readC_UMI"
     assert rt.read2_almnt is not None
 
     # Case 2: one alignment is None (simulate unmapped).
     bundle_unmapped = [(aln1, None)]
-    rt2 = set_alignment_category(bundle_unmapped, bamfile="test")
-    assert rt2.category == "_unmapped"
+    rt2 = set_alignment_category(bundle_unmapped, bamfile="test", 
+                                 config=ReadCountConfig())
+    assert rt2.category == ReadCategory.UNMAPPED
     assert rt2.read2_almnt is None
 
     # Case 3: both alignments exist but one is not aligned.
     aln3 = DummyAlignment("readD_UMI", False, True, iv, 0)
     bundle_unmapped2 = [(aln2, aln3)]
-    rt3 = set_alignment_category(bundle_unmapped2, bamfile="test")
-    assert rt3.category == "_unmapped"
+    rt3 = set_alignment_category(bundle_unmapped2, bamfile="test", 
+                                 config=ReadCountConfig())
+    assert rt3.category == ReadCategory.UNMAPPED
 
     # Case 4: empty bundle
     with pytest.raises(ValueError):
-        set_alignment_category([], bamfile="test")
+        set_alignment_category([], bamfile="test", config=ReadCountConfig())
 
     # Case 5: multimapping but count_primary not set
     aln4 = DummyAlignment("readE_UMI", True, True, iv, 0)
@@ -179,15 +185,17 @@ def test_set_alignment_category():
     aln6 = DummyAlignment("readF_UMI", True, True, iv, 0)
     aln7 = DummyAlignment("readF_UMI", True, True, iv, 0)
     bundle_multi = [(aln4, aln5), (aln6, aln7)]
-    rt5 = set_alignment_category(bundle_multi, bamfile="test", count_primary=False)
-    assert rt5.category == "_multimapping"
+    rt5 = set_alignment_category(bundle_multi, bamfile="test", 
+                                 config=ReadCountConfig(count_primary=False))
+    assert rt5.category == ReadCategory.MULTIMAPPING
     assert rt5.read1_almnt is aln4
     assert rt5.read2_almnt is aln5
 
     # Case 6: multimapping with no primary alignment
     bundle_multi = [(aln4, aln5), (aln6, aln7)]
-    rt6 = set_alignment_category(bundle_multi, bamfile="test", count_primary=True)
-    assert rt6.category == "_multimapping"
+    rt6 = set_alignment_category(bundle_multi, bamfile="test", 
+                                 config=ReadCountConfig(count_primary=True))
+    assert rt6.category == ReadCategory.MULTIMAPPING
 
 def test_multimapping_primary_alignments():
     """
@@ -206,8 +214,9 @@ def test_multimapping_primary_alignments():
     aln3.not_primary_alignment = False # primary
     aln4.not_primary_alignment = False # primary
     bundle_multi = [(aln1, aln2), (aln3, aln4)]
-    rt1 = set_alignment_category(bundle_multi, bamfile="test", count_primary=True)
-    assert rt1.category == ""
+    rt1 = set_alignment_category(bundle_multi, bamfile="test", 
+                                 config=ReadCountConfig(count_primary=True))
+    assert rt1.category == ReadCategory.UNIQUE
     assert rt1.read1_almnt is aln3
     assert rt1.read2_almnt is aln4
 
@@ -218,23 +227,27 @@ def test_multimapping_primary_alignments():
 
     # Case 3: testing multiple_primary_action raise
     with pytest.raises(ValueError):
-        set_alignment_category(bundle_multi, bamfile="test", count_primary=True, 
-                                multiple_primary_action='raise')
+        set_alignment_category(bundle_multi, bamfile="test", 
+                                config=ReadCountConfig(count_primary=True, 
+                                                       multiple_primary_action='raise'))
 
     # Case 4: testing multiple_primary_action warn
-    rt4 = set_alignment_category(bundle_multi, bamfile="test", count_primary=True, 
-                                  multiple_primary_action='warn')
-    assert rt4.category == ""
+    rt4 = set_alignment_category(bundle_multi, bamfile="test", 
+                                 config=ReadCountConfig(count_primary=True, 
+                                                        multiple_primary_action='warn'))
+    assert rt4.category == ReadCategory.UNIQUE
 
     # Case 5: testing multiple_primary_action skip
-    rt5 = set_alignment_category(bundle_multi, bamfile="test", count_primary=True, 
-                                  multiple_primary_action='skip')
-    assert rt5.category == "_multimapping"
+    rt5 = set_alignment_category(bundle_multi, bamfile="test", 
+                                 config=ReadCountConfig(count_primary=True, 
+                                                        multiple_primary_action='skip'))
+    assert rt5.category == ReadCategory.MULTIMAPPING
 
     # Case 6: test nonsense multiple_primary_action
     with pytest.raises(ValueError):
-        set_alignment_category(bundle_multi, bamfile="test", count_primary=True, 
-                                multiple_primary_action='abc')
+        set_alignment_category(bundle_multi, bamfile="test", 
+                               config=ReadCountConfig(count_primary=True, 
+                                                      multiple_primary_action='abc'))
 
 def test_read_at_exon_boundary():
     """
@@ -301,7 +314,7 @@ def test_readtrack_can_do_overlap():
     assert rt.can_do_overlap() is True
 
     # Now set category and check that it returns False.
-    rt.category = '_no_feature'
+    rt.category = ReadCategory.NO_FEATURE
     assert rt.can_do_overlap() is False
 
     # Now set one of the alignments to None.
@@ -327,7 +340,7 @@ def test_readtrack_unique_overlap():
     
     assert rt.gene_to_count == "gene1"
     assert rt.exon_to_count == "g1exon1"
-    assert rt.category == ""
+    assert rt.category == ReadCategory.UNIQUE
 
 def test_readtrack_consensus_overlap():
     """
@@ -362,7 +375,7 @@ def test_readtrack_consensus_overlap():
     rt1.evaluate_overlap(dummy_eattributes)
 
     assert rt1.gene_to_count == "gene1"
-    assert rt1.category == ""
+    assert rt1.category == ReadCategory.UNIQUE
 
     aln3 = DummyAlignment("read2_UMI", True, False, ivg1e1, 0)
     aln4 = DummyAlignment("read2_UMI", True, False, ivint, 0)
@@ -372,7 +385,7 @@ def test_readtrack_consensus_overlap():
     rt2.evaluate_overlap(dummy_eattributes)
 
     assert rt2.gene_to_count == ""
-    assert rt2.category == "_ambiguous"
+    assert rt2.category == ReadCategory.AMBIGUOUS
 
 def test_readtrack_no_feature():
     """
@@ -386,7 +399,7 @@ def test_readtrack_no_feature():
     rt.find_overlap(gfeatures, efeatures, {})
     rt.evaluate_overlap({})
     
-    assert rt.category == "_no_feature"
+    assert rt.category == ReadCategory.NO_FEATURE
     assert rt.gene_to_count == ""
     assert rt.exon_to_count == ""
 
@@ -410,7 +423,7 @@ def test_readtrack_ambiguous():
     rt.find_overlap(gfeatures, efeatures, dummy_eattributes)
     rt.evaluate_overlap(dummy_eattributes)
     
-    assert rt.category == "_ambiguous"
+    assert rt.category == ReadCategory.AMBIGUOUS
     assert rt.gene_to_count == ""
     assert rt.exon_to_count == ""
 
@@ -436,7 +449,7 @@ def test_readtrack_multiple_overlap_single_gene():
     rt.find_overlap(gfeatures, efeatures, dummy_eattributes)
     rt.evaluate_overlap(dummy_eattributes)
     
-    assert rt.category == ""
+    assert rt.category == ReadCategory.UNIQUE
     assert rt.gene_to_count == "gene1"
     assert rt.exon_to_count in ["g1exon1", "g1exon2"]
 
@@ -492,8 +505,8 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
     counts, _ = parse_bam_and_count("dummy.bam", gtf_data, 
-                                    count_primary=True,
-                                    cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
+                                    ReadCountConfig(count_primary=True,
+                                                    cols_to_use=['UE', 'RE', 'UI', 'RI', 'D']))
     
     gene1_counts = counts["gene1"]
     assert gene1_counts["UE"] == 1 # from bundle1
@@ -501,10 +514,10 @@ def test_parse_bam_and_count_simple(monkeypatch, tmp_path):
     assert gene1_counts["RE"] == 2 # from bundle2, bundle7
     assert gene1_counts["RI"] == 1 # from bundle3
 
-    unmapped = counts["_unmapped"] # from bundle4
+    unmapped = counts[ReadCategory.UNMAPPED] # from bundle4
     assert unmapped["UE"] == 1
 
-    multimapping = counts["_multimapping"] # from bundle5
+    multimapping = counts[ReadCategory.MULTIMAPPING] # from bundle5
     assert multimapping["RE"] == 1
 
 def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
@@ -550,7 +563,8 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts, _ = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
+    counts, _ = parse_bam_and_count("dummy.bam", gtf_data, 
+                                    ReadCountConfig(cols_to_use=['UE', 'RE', 'UI', 'RI', 'D']))
     
     gene1_counts = counts["gene1"]
     gene2_counts = counts["gene2"]
@@ -559,7 +573,7 @@ def test_parse_bam_and_count_complex(monkeypatch, tmp_path):
     assert gene1_counts["D"] == 1 # from bundle4
 
     assert gene2_counts["UI"] == 1 # from bundle2 (gene is intronic)
-    assert counts["_ambiguous"]["RE"] == 1 # from bundle3
+    assert counts[ReadCategory.AMBIGUOUS]["RE"] == 1 # from bundle3
 
 def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
     """
@@ -595,7 +609,8 @@ def test_parse_bam_and_count_umi_deduplication(monkeypatch, tmp_path):
     monkeypatch.setattr(HTSeq, "BAM_Reader", lambda bamfile: bamfile)
     monkeypatch.setattr(HTSeq, "pair_SAM_alignments", dummy_pair_SAM_alignments_factory(bundles))
     
-    counts, _ = parse_bam_and_count("dummy.bam", gtf_data, cols_to_use=['UE', 'RE', 'UI', 'RI', 'D'])
+    counts, _ = parse_bam_and_count("dummy.bam", gtf_data, 
+                                    ReadCountConfig(cols_to_use=['UE', 'RE', 'UI', 'RI', 'D']))
 
     gene1_counts = counts["gene1"]
     gene2_counts = counts["gene2"]

@@ -7,14 +7,40 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-import logging
-logger = logging.getLogger(__name__)
-
 import HTSeq
 try:
     from rapidfuzz.distance import Hamming
 except: # this is checked in cli.py
     pass
+
+import logging
+logger = logging.getLogger(__name__)
+
+class ReadCategory:
+    # store alignment category mapping for individual readpairs
+    UNIQUE       = "_unique"        # exactly one alignment, counted
+    UNMAPPED     = "_unmapped"      # no valid aligned readpairs
+    MULTIMAPPING = "_multimapping"  # more than one valid aligned readpair
+    NO_FEATURE   = "_no_feature"    # readpair alignments to intergenic regions
+    AMBIGUOUS    = "_ambiguous"     # conflicting gene annotation for readpair
+
+@dataclass
+class ReadCountConfig:
+    # config object to reduce kwargs repetition
+    cols_to_use: list = field(default_factory=list)
+    combine_unspliced: bool = False
+    do_dedup: bool = True
+    min_read_mapQ: int = 0
+    count_primary: bool = False
+    multiple_primary_action: str = 'warn'
+    umi_correct: bool = False
+    countratio_threshold: int = 2
+    hamming_threshold: int = 1
+
+    def __post_init__(self):
+        assert validate_cols_to_use(self.cols_to_use)
+        self.combine_unspliced = 'U' in self.cols_to_use
+        self.do_dedup = 'D' in self.cols_to_use
 
 def validate_cols_to_use(cols):
     # because cols_to_use values direct downstream logic inplace of function args
@@ -114,7 +140,7 @@ class ReadTrack:
     read1_almnt: Any
     read2_almnt: Any
     umi: Any = field(init=False)
-    category: str = ""
+    category: str = ReadCategory.UNIQUE
     read1_overlap: dict = field(default_factory=dict)
     read2_overlap: dict = field(default_factory=dict)
     gene_to_count: str = ""
@@ -134,7 +160,7 @@ class ReadTrack:
 
     def can_do_overlap(self):
         return self.read1_almnt is not None and \
-               self.read2_almnt is not None and (self.category == '')
+               self.read2_almnt is not None and (self.category == ReadCategory.UNIQUE)
 
     def find_overlap(self, gfeatures, efeatures, eattributes):
         assert self.can_do_overlap()
@@ -156,7 +182,7 @@ class ReadTrack:
                     # features doesnt contain scaffold chr, likely GTF <-> reference mismatch
                     logger.warning( (f"failed lookup of {self.read1_almnt.read.name}"
                                      f" at {almnt.iv} in GTF features, calling unmapped") )
-                    self.category = '_unmapped'
+                    self.category = ReadCategory.UNMAPPED
                     return self
 
                 # populate gene -> exon overlaps
@@ -188,7 +214,7 @@ class ReadTrack:
 
         # now assign readpairs to gene counts based on overlap
         if len(gene_overlap) == 0: # intergenic
-            self.category = '_no_feature'
+            self.category = ReadCategory.NO_FEATURE
 
         elif len(gene_overlap) == 1:
             self.gene_to_count = gene_overlap[0]
@@ -204,7 +230,7 @@ class ReadTrack:
 
             # if exons overlap or intronic in both: its ambiguous
             else:
-                self.category = '_ambiguous'
+                self.category = ReadCategory.AMBIGUOUS
 
         return self
 
@@ -225,7 +251,7 @@ def set_multimapper_category(bundle, bamfile, count_primary=False, multiple_prim
 
     # default vals for returned ReadTrack
     r1_to_count, r2_to_count = bundle[0]
-    read_category = ''
+    read_category = ReadCategory.UNIQUE
 
     if count_primary:
         primaries = []
@@ -247,58 +273,55 @@ def set_multimapper_category(bundle, bamfile, count_primary=False, multiple_prim
                 raise ValueError(f"in {bamfile} found multiple primary alignments:\n{bundle}")
 
             elif multiple_primary_action == 'skip':
-                read_category = '_multimapping'
+                read_category = ReadCategory.MULTIMAPPING
 
             else:
                 raise ValueError(f"invalid value {multiple_primary_action} for multiple_primary_action")
 
         if not primaries: # no primary alignments (or not set by aligner)
-            read_category = '_multimapping'
+            read_category = ReadCategory.MULTIMAPPING
         else:
             r1_to_count, r2_to_count = primaries[0]
             if (r1_to_count is None or not r1_to_count.aligned) or \
                (r2_to_count is None or not r2_to_count.aligned): # either read unaligned
-                read_category = '_unmapped'
+                read_category = ReadCategory.UNMAPPED
 
     else: # multimapping but no count_primary: use first pair
-        read_category = '_multimapping'
+        read_category = ReadCategory.MULTIMAPPING
 
     return ReadTrack(read1_almnt=r1_to_count,
                      read2_almnt=r2_to_count,
                      category=read_category)
 
 
-def set_alignment_category(bundle, bamfile,
-                           min_read_mapQ=0,
-                           count_primary=False,
-                           multiple_primary_action='warn'):
+def set_alignment_category(bundle, bamfile, config: ReadCountConfig):
 
     if not bundle: raise ValueError("empty bundle: no alignments to extract")
 
     # filter aligned reads and prune by mapQ
-    aread_bundle = filter_aligned_reads(bundle, min_read_mapQ=min_read_mapQ)
+    aread_bundle = filter_aligned_reads(bundle, min_read_mapQ=config.min_read_mapQ)
 
     # if none of the bundle has reads aligned in a proper pair, its _unmapped
     if (not aread_bundle) or all(r1 is None or r2 is None for r1, r2 in aread_bundle):
         return ReadTrack(read1_almnt=bundle[0][0], # preserve readname UMI information
                          read2_almnt=bundle[0][1],
-                         category='_unmapped')
+                         category=ReadCategory.UNMAPPED)
 
     # multimapping readpair
     if len(aread_bundle) > 1:
         return set_multimapper_category(aread_bundle, bamfile,
-                                        count_primary=count_primary,
-                                        multiple_primary_action=multiple_primary_action)
+                                        count_primary=config.count_primary,
+                                        multiple_primary_action=config.multiple_primary_action)
 
     # readpair has single alignment
     else:
         rt = ReadTrack(read1_almnt=aread_bundle[0][0],
                        read2_almnt=aread_bundle[0][1],
-                       category='')
+                       category=ReadCategory.UNIQUE)
 
         if (rt.read1_almnt is None or not rt.read1_almnt.aligned) or \
            (rt.read2_almnt is None or not rt.read2_almnt.aligned): # either read unaligned
-            rt.category = '_unmapped'
+            rt.category = ReadCategory.UNMAPPED
 
         return rt
 
@@ -332,16 +355,9 @@ def umi_correction(umicounts, countratio=2, hamming_threshold=1):
 
     return corrected
 
-def parse_bam_and_count(bamfile, gtf_data,
-                        cols_to_use=None,
-                        count_primary=False,
-                        multiple_primary_action='warn',
-                        min_read_mapQ=0,
-                        umi_correct_params=None):
+def parse_bam_and_count(bamfile, gtf_data, config: ReadCountConfig):
 
-    assert validate_cols_to_use(cols_to_use)
-    combine_unspliced = 'U' in cols_to_use
-    do_dedup = 'D' in cols_to_use
+    assert validate_cols_to_use(config.cols_to_use)
 
     # assign GTF data and fill default columns
     gfeatures, efeatures, gattributes, eattributes = gtf_data
@@ -352,7 +368,7 @@ def parse_bam_and_count(bamfile, gtf_data,
 
     # read and UMI count tracking dicts
     geneumis = {i:defaultdict(lambda: defaultdict(int)) for i in gattributes.keys()} 
-    totalumis = {i:0 for i in cols_to_use + ['total', 'uncounted', 'corrected']} 
+    totalumis = {i:0 for i in config.cols_to_use + ['total', 'uncounted', 'corrected']} 
 
     # iterate over reads and assign feature overlaps
     bam_reader = HTSeq.BAM_Reader(bamfile)
@@ -363,10 +379,7 @@ def parse_bam_and_count(bamfile, gtf_data,
             totalumis['uncounted'] += 1
             continue
 
-        readpair = set_alignment_category(bundle, bamfile,
-                                          min_read_mapQ=0,
-                                          count_primary=count_primary,
-                                          multiple_primary_action=multiple_primary_action)
+        readpair = set_alignment_category(bundle, bamfile, config)
 
         # extract overlapping genes, exons
         if readpair.can_do_overlap(): readpair.find_overlap(gfeatures, efeatures, eattributes)
@@ -375,11 +388,11 @@ def parse_bam_and_count(bamfile, gtf_data,
         # now count read at appropriate category based on overlap
         rkey = 'U' if readpair.umi else 'R'
         if readpair.gene_to_count == '': # no gene overlap
-            gcounts[readpair.category][(rkey + 'E') if not combine_unspliced else rkey] += 1
+            gcounts[readpair.category][(rkey + 'E') if not config.combine_unspliced else rkey] += 1
             totalumis['uncounted'] += 1
 
         else: # has gene overlap
-            if not combine_unspliced:
+            if not config.combine_unspliced:
                 rkey += 'I' if readpair.exon_to_count == '' else 'E'
 
             if readpair.umi: # store gene UMIs separately for deduplication/correction
@@ -388,13 +401,13 @@ def parse_bam_and_count(bamfile, gtf_data,
                 gcounts[readpair.gene_to_count][rkey] += 1
 
     # parsed all reads into gene overlaps, now process UMI counts
-    if umi_correct_params is None: # no UMI correction
-        if combine_unspliced:
+    if not config.umi_correct: # no UMI correction
+        if config.combine_unspliced:
             for g in geneumis.keys():
                 umisum = sum(geneumis[g]['U'].values())
                 umilen = len(geneumis[g]['U'])
 
-                if do_dedup:
+                if config.do_dedup:
                     gcounts[g]['U'] = umilen
                     gcounts[g]['D'] = umisum - umilen
                 else:
@@ -405,17 +418,17 @@ def parse_bam_and_count(bamfile, gtf_data,
                     umisum = sum(geneumis[g][uie].values())
                     umilen = len(geneumis[g][uie])
 
-                    gcounts[g][uie] = umilen if do_dedup else umisum
+                    gcounts[g][uie] = umilen if config.do_dedup else umisum
 
-                if do_dedup:
+                if config.do_dedup:
                     gcounts[g]['D'] = sum(geneumis[g]['UI'].values()) - gcounts[g]['UI'] + \
                                       sum(geneumis[g]['UE'].values()) - gcounts[g]['UE']
 
     else: # with UMI correction
-        ct = umi_correct_params['countratio_threshold']
-        ht = umi_correct_params['hamming_threshold']
+        ct = config.countratio_threshold
+        ht = config.hamming_threshold
 
-        if combine_unspliced:
+        if config.combine_unspliced:
             for g in geneumis.keys():
                 UIE_corrected = umi_correction(geneumis[g]['U'], countratio=ct, hamming_threshold=ht)
 
@@ -423,7 +436,7 @@ def parse_bam_and_count(bamfile, gtf_data,
                 totalumis['corrected'] += sum([geneumis[g]['U'][i] for i in geneumis[g]['U'] \
                                                if i not in UIE_corrected.keys()])
 
-                if do_dedup:
+                if config.do_dedup:
                     gcounts[g]['U'] = len(UIE_corrected.keys()) # unique UMIs
                     gcounts[g]['D'] = sum(UIE_corrected.values()) - gcounts[g]['U']
                 else:
@@ -440,7 +453,7 @@ def parse_bam_and_count(bamfile, gtf_data,
                 totalumis['corrected'] += sum([geneumis[g]['UE'][i] for i in geneumis[g]['UE'] \
                                                if i not in UE_corrected.keys()])
 
-                if do_dedup:
+                if config.do_dedup:
                     gcounts[g]['UI'] = len(UI_corrected.keys())
                     gcounts[g]['UE'] = len(UE_corrected.keys())
                     gcounts[g]['D'] = sum(UI_corrected.values()) - gcounts[g]['UI'] + \
@@ -451,7 +464,7 @@ def parse_bam_and_count(bamfile, gtf_data,
 
     # update total counts
     for g in gattributes.keys():
-        for i in cols_to_use:
+        for i in config.cols_to_use:
             totalumis[i] += gcounts[g][i]
 
     return gcounts, totalumis
@@ -472,35 +485,23 @@ def write_counts_for_col(filecounts, col, outdir, geneorder, sep='\t'):
     with open(os.path.join(outdir, f"umicounts.{col}.{ext}"), 'w') as f:
         f.write('\n'.join(lines))
 
-def process_bam(bamfile, gtf_data,
-                cols_to_use=None,
-                min_read_mapQ=0,
-                count_primary=False,
-                multiple_primary_action='warn',
-                umi_correct_params=None):
+def process_bam(bamfile, gtf_data, config):
 
-    assert validate_cols_to_use(cols_to_use)
+    assert validate_cols_to_use(config.cols_to_use)
 
     # assign GTF data
     _, _, gattributes, _ = gtf_data
 
     # parsing BAM and count reads
-    umicount, ttl = parse_bam_and_count(bamfile, gtf_data,
-                                        cols_to_use=cols_to_use,
-                                        min_read_mapQ=min_read_mapQ,
-                                        count_primary=count_primary,
-                                        multiple_primary_action=multiple_primary_action,
-                                        umi_correct_params=umi_correct_params)
-
-
+    umicount, ttl = parse_bam_and_count(bamfile, gtf_data, config)
 
     # report summarized quantities of counted read categories
     if sum(ttl.values()) > 0:
         sumstr = f"{os.path.basename(bamfile)}: {ttl['total']} reads"
         sumstr += f", {ttl['uncounted']} uncounted reads ({(ttl['uncounted']/ttl['total'])*100:.2f}%)"
-        for i in cols_to_use:
+        for i in config.cols_to_use:
             sumstr += f", {ttl[i]} {i}-reads ({(ttl[i]/ttl['total'])*100:.2f}%)"
-        if umi_correct_params: sumstr += f", {ttl['corrected']} counts in corrected UMIs "
+        if config.umi_correct: sumstr += f", {ttl['corrected']} counts in corrected UMIs "
         logger.info(sumstr)
     else:
         raise ValueError(f"empty BAM file")
@@ -509,10 +510,10 @@ def process_bam(bamfile, gtf_data,
 
 def _bam_worker(task_args):
     # worker function for multiprocessing
-    infile, gtf_data, kwargs = task_args
+    infile, gtf_data, config = task_args
 
     try:
-        umicount = process_bam(infile, gtf_data, **kwargs)
+        umicount = process_bam(infile, gtf_data, config)
     except Exception as e:
         new_msg = f"in {infile}:\n{e}"
         logger.error(new_msg, exc_info=True)
@@ -521,7 +522,7 @@ def _bam_worker(task_args):
     return infile, umicount
 
 def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
-                         cols_to_use=None,
+                         cols_to_use=[],
                          min_read_mapQ=0,
                          count_primary=False,
                          multiple_primary_action='warn',
@@ -532,7 +533,7 @@ def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
     # gtf_data can be parsed from GTF file using load_gtf_data(gtffile)
 
     # bundle constant args
-    kwargs = dict(
+    config = ReadCountConfig(
         cols_to_use=cols_to_use,
         min_read_mapQ=min_read_mapQ,
         count_primary=count_primary,
@@ -541,7 +542,7 @@ def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
     )
 
     # map the worker over the filepairs
-    tasks = [(infile, gtf_data, kwargs) for infile in bamfiles]
+    tasks = [(infile, gtf_data, config) for infile in bamfiles]
     with Pool(num_workers) as pool:
         results = pool.map(_bam_worker, tasks)
 
