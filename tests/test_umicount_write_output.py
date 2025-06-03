@@ -35,6 +35,10 @@ def test_basic_tsv():
         lines = read_lines(os.path.join(tmpdir, 'umicounts.A.tsv'))
         expected = [
             'feature\tfile1\tfile2',
+            '_unmapped\t0\t0', 
+            '_multimapping\t0\t0', 
+            '_no_feature\t0\t0', 
+            '_ambiguous\t0\t0', 
             'gene1\t1\t4',
             'gene2\t3\t0',
             'gene3\t0\t0'
@@ -55,6 +59,10 @@ def test_basic_csv():
         lines = read_lines(os.path.join(tmpdir, 'umicounts.B.csv'))
         expected = [
             'feature,file1,file2',
+            '_unmapped,0,0', 
+            '_multimapping,0,0', 
+            '_no_feature,0,0', 
+            '_ambiguous,0,0', 
             'gene1,2,0',
             'gene2,0,0'
         ]
@@ -74,6 +82,10 @@ def test_txt_extension_for_other_sep():
         lines = read_lines(os.path.join(tmpdir, 'umicounts.B.txt'))
         expected = [
             'feature|file1|file2',
+            '_unmapped|0|0', 
+            '_multimapping|0|0', 
+            '_no_feature|0|0', 
+            '_ambiguous|0|0', 
             'gene1|2|0'
         ]
         assert lines == expected
@@ -89,7 +101,9 @@ def test_empty_inputs():
             sep='\t')
 
         lines = read_lines(os.path.join(tmpdir, 'umicounts.A.tsv'))
-        assert lines == ['feature']
+        print(lines)
+        assert lines == ['feature', '_unmapped', '_multimapping', 
+                         '_no_feature', '_ambiguous']
 
 def test_nonexistent_gene_defaults_to_zero():
     # geneorder includes a gene not in any filecounts
@@ -106,6 +120,10 @@ def test_nonexistent_gene_defaults_to_zero():
         lines = read_lines(os.path.join(tmpdir, 'umicounts.A.tsv'))
         expected = [
             'feature\tfile1\tfile2',
+            '_unmapped\t0\t0', 
+            '_multimapping\t0\t0', 
+            '_no_feature\t0\t0', 
+            '_ambiguous\t0\t0', 
             'geneX\t0\t0',
         ]
         assert lines == expected
