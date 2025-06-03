@@ -479,6 +479,7 @@ def write_counts_for_col(filecounts, col, outdir, geneorder, sep='\t'):
 
     lines = [sep.join(['feature'] + filenames)] # start with header
     for g in ReadCategory.get_category_list() + geneorder:
+        if g == ReadCategory.UNIQUE: continue
         linevals = []
         for fname in filenames:
             linevals.append( str( filecounts.get(fname, {}).get(g, {}).get(col, 0))) # defaults to 0 if missing
