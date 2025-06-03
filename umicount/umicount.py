@@ -24,6 +24,11 @@ class ReadCategory:
     NO_FEATURE   = "_no_feature"    # readpair alignments to intergenic regions
     AMBIGUOUS    = "_ambiguous"     # conflicting gene annotation for readpair
 
+    @classmethod
+    def get_category_list(cls):
+        return [value for key, value in vars(cls).items()
+                if not key.startswith("__") and isinstance(value, str)]
+
 @dataclass
 class ReadCountConfig:
     # config object to reduce kwargs repetition
@@ -362,8 +367,7 @@ def parse_bam_and_count(bamfile, gtf_data, config: ReadCountConfig):
     # assign GTF data and fill default columns
     gfeatures, efeatures, gattributes, eattributes = gtf_data
     gcounts = {}
-    category_cols = ['_unmapped', '_multimapping', '_no_feature', '_ambiguous', '_FAIL']
-    for g in category_cols + list(gattributes.keys()):
+    for g in ReadCategory.get_category_list() + list(gattributes.keys()):
         gcounts[g] = defaultdict(int)
 
     # read and UMI count tracking dicts
@@ -474,7 +478,7 @@ def write_counts_for_col(filecounts, col, outdir, geneorder, sep='\t'):
     filenames = list(filecounts.keys()) # fix order
 
     lines = [sep.join(['feature'] + filenames)] # start with header
-    for g in geneorder:
+    for g in ReadCategory.get_category_list() + geneorder:
         linevals = []
         for fname in filenames:
             linevals.append( str( filecounts.get(fname, {}).get(g, {}).get(col, 0))) # defaults to 0 if missing
@@ -488,9 +492,6 @@ def write_counts_for_col(filecounts, col, outdir, geneorder, sep='\t'):
 def process_bam(bamfile, gtf_data, config):
 
     assert validate_cols_to_use(config.cols_to_use)
-
-    # assign GTF data
-    _, _, gattributes, _ = gtf_data
 
     # parsing BAM and count reads
     umicount, ttl = parse_bam_and_count(bamfile, gtf_data, config)
