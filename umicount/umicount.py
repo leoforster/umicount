@@ -42,7 +42,7 @@ class ReadCountConfig:
     umi_correct: bool = False
     countratio_threshold: int = 2
     hamming_threshold: int = 1
-    tmp_dir str = ''
+    tmp_dir: str = ''
 
     def __post_init__(self):
         assert validate_cols_to_use(self.cols_to_use)
