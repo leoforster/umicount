@@ -1,6 +1,7 @@
 import sys
 import os
 import pickle
+import tempfile
 import random
 from multiprocessing import Pool
 from collections import defaultdict
@@ -41,6 +42,7 @@ class ReadCountConfig:
     umi_correct: bool = False
     countratio_threshold: int = 2
     hamming_threshold: int = 1
+    tmp_dir = os.getcwd()
 
     def __post_init__(self):
         assert validate_cols_to_use(self.cols_to_use)
@@ -473,22 +475,24 @@ def parse_bam_and_count(bamfile, gtf_data, config: ReadCountConfig):
 
     return gcounts, totalumis
 
-def write_counts_for_col(filecounts, col, outdir, geneorder, sep='\t'):
+def write_counts_for_col(pkl_files, col, outdir, geneorder, sep='\t'):
+    gene_keys = [i for i in ReadCategory.get_category_list() if i != ReadCategory.UNIQUE] + geneorder
 
-    filenames = list(filecounts.keys()) # fix order
-
-    lines = [sep.join(['feature'] + filenames)] # start with header
-    for g in ReadCategory.get_category_list() + geneorder:
-        if g == ReadCategory.UNIQUE: continue
-        linevals = []
-        for fname in filenames:
-            linevals.append( str( filecounts.get(fname, {}).get(g, {}).get(col, 0))) # defaults to 0 if missing
-
-        lines.append(sep.join([g] + linevals))
+    header = sep.join(['samples'] + gene_keys) # start with header
 
     ext = 'tsv' if sep == '\t' else 'csv' if sep == ',' else 'txt'
     with open(os.path.join(outdir, f"umicounts.{col}.{ext}"), 'w') as f:
-        f.write('\n'.join(lines))
+
+        f.write(header + '\n')
+        for path in pkl_files:
+            with open(path, 'rb') as pf:
+                umicounts = pickle.load(pf)
+
+            row = [os.path.basename(path).replace('.pkl', '')] # initiate with sample
+            for g in gene_keys:
+                row.append(str(umicounts.get(g, {}).get(col, 0))) # defaults to 0 if missing
+
+            f.write(sep.join(row) + '\n')
 
 def process_bam(bamfile, gtf_data, config):
 
@@ -521,10 +525,15 @@ def _bam_worker(task_args):
         logger.error(new_msg, exc_info=True)
         raise
 
-    return infile, umicount
+    tmp_file = os.path.join(config.tmp_dir, os.path.basename(infile) + ".pkl")
+    with open(tmp_file, 'wb') as f:
+        pickle.dump(umicount, f)
+
+    return tmp_file
 
 def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
                          cols_to_use=[],
+                         tmp_dir=None,
                          min_read_mapQ=0,
                          count_primary=False,
                          multiple_primary_action='warn',
@@ -537,6 +546,7 @@ def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
     # bundle constant args
     config = ReadCountConfig(
         cols_to_use=cols_to_use,
+        tmp_dir=tmp_dir if tmp_dir else outdir,
         min_read_mapQ=min_read_mapQ,
         count_primary=count_primary,
         multiple_primary_action=multiple_primary_action,
@@ -548,9 +558,8 @@ def process_bam_parallel(bamfiles, outdir, gtf_data, num_workers=4,
     # map the worker over the filepairs
     tasks = [(infile, gtf_data, config) for infile in bamfiles]
     with Pool(num_workers) as pool:
-        results = pool.map(_bam_worker, tasks)
+        results_paths = pool.map(_bam_worker, tasks)
 
-    # output counts table to file
-    filecounts = {fname:umicounts for fname, umicounts in results} # dict of filename:umicounts
+    # output counts table to file, cells in rows
     for c in cols_to_use:
-        write_counts_for_col(filecounts, c, outdir, list(gtf_data[2].keys()), sep='\t') # gtf_data[2] is gattributes
+        write_counts_for_col(results_paths, c, outdir, list(gtf_data[2].keys()), sep='\t') # gtf_data[2] is gattributes

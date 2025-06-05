@@ -1,5 +1,7 @@
 import pytest
+import pickle
 import tempfile
+import shutil
 import os
 
 from umicount.umicount import (
@@ -21,12 +23,27 @@ sample_filecounts = {
         }
     }
 
-def test_basic_tsv():
+@pytest.fixture
+def temp_pkl_files():
+    """Creates a temporary directory with pickle files and yields their paths."""
+    tmpdir = tempfile.mkdtemp()
+    pkl_files = []
+    try:
+        for fname, data in sample_filecounts.items():
+            path = os.path.join(tmpdir, fname + '.pkl')
+            with open(path, 'wb') as pf:
+                pickle.dump(data, pf)
+            pkl_files.append(path)
+        yield pkl_files
+    finally:
+        shutil.rmtree(tmpdir)
+
+def test_basic_tsv(temp_pkl_files):
     geneorder = ['gene1', 'gene2', 'gene3']
 
     with tempfile.TemporaryDirectory() as tmpdir:
         write_counts_for_col(
-            filecounts=sample_filecounts,
+            pkl_files=temp_pkl_files,
             col='A',
             outdir=tmpdir,
             geneorder=geneorder,
@@ -34,23 +51,18 @@ def test_basic_tsv():
         )
         lines = read_lines(os.path.join(tmpdir, 'umicounts.A.tsv'))
         expected = [
-            'feature\tfile1\tfile2',
-            '_unmapped\t0\t0', 
-            '_multimapping\t0\t0', 
-            '_no_feature\t0\t0', 
-            '_ambiguous\t0\t0', 
-            'gene1\t1\t4',
-            'gene2\t3\t0',
-            'gene3\t0\t0'
+            'samples\t_unmapped\t_multimapping\t_no_feature\t_ambiguous\tgene1\tgene2\tgene3',
+            'file1\t0\t0\t0\t0\t1\t3\t0',
+            'file2\t0\t0\t0\t0\t4\t0\t0'
         ]
         assert lines == expected
 
-def test_basic_csv():
+def test_basic_csv(temp_pkl_files):
     geneorder = ['gene1', 'gene2']
 
     with tempfile.TemporaryDirectory() as tmpdir:
         write_counts_for_col(
-            filecounts=sample_filecounts,
+            pkl_files=temp_pkl_files,
             col='B',
             outdir=tmpdir,
             geneorder=geneorder,
@@ -58,22 +70,18 @@ def test_basic_csv():
         )
         lines = read_lines(os.path.join(tmpdir, 'umicounts.B.csv'))
         expected = [
-            'feature,file1,file2',
-            '_unmapped,0,0', 
-            '_multimapping,0,0', 
-            '_no_feature,0,0', 
-            '_ambiguous,0,0', 
-            'gene1,2,0',
-            'gene2,0,0'
+            'samples,_unmapped,_multimapping,_no_feature,_ambiguous,gene1,gene2',
+            'file1,0,0,0,0,2,0',
+            'file2,0,0,0,0,0,0'
         ]
         assert lines == expected
 
-def test_txt_extension_for_other_sep():
+def test_txt_extension_for_other_sep(temp_pkl_files):
     geneorder = ['gene1']
 
     with tempfile.TemporaryDirectory() as tmpdir:
         write_counts_for_col(
-            filecounts=sample_filecounts,
+            pkl_files=temp_pkl_files,
             col='B',
             outdir=tmpdir,
             geneorder=geneorder,
@@ -81,12 +89,9 @@ def test_txt_extension_for_other_sep():
         )
         lines = read_lines(os.path.join(tmpdir, 'umicounts.B.txt'))
         expected = [
-            'feature|file1|file2',
-            '_unmapped|0|0', 
-            '_multimapping|0|0', 
-            '_no_feature|0|0', 
-            '_ambiguous|0|0', 
-            'gene1|2|0'
+            'samples|_unmapped|_multimapping|_no_feature|_ambiguous|gene1',
+            'file1|0|0|0|0|2',
+            'file2|0|0|0|0|0'
         ]
         assert lines == expected
 
@@ -94,24 +99,22 @@ def test_empty_inputs():
     # No files, no genes
     with tempfile.TemporaryDirectory() as tmpdir:
         write_counts_for_col(
-            filecounts={}, 
+            pkl_files=[], 
             col='A', 
             outdir=tmpdir, 
             geneorder=[], 
             sep='\t')
 
         lines = read_lines(os.path.join(tmpdir, 'umicounts.A.tsv'))
-        print(lines)
-        assert lines == ['feature', '_unmapped', '_multimapping', 
-                         '_no_feature', '_ambiguous']
+        assert lines == ['samples\t_unmapped\t_multimapping\t_no_feature\t_ambiguous']
 
-def test_nonexistent_gene_defaults_to_zero():
+def test_nonexistent_gene_defaults_to_zero(temp_pkl_files):
     # geneorder includes a gene not in any filecounts
     geneorder = ['geneX']
 
     with tempfile.TemporaryDirectory() as tmpdir:
         write_counts_for_col(
-            filecounts=sample_filecounts,
+            pkl_files=temp_pkl_files,
             col='A',
             outdir=tmpdir,
             geneorder=geneorder,
@@ -119,11 +122,8 @@ def test_nonexistent_gene_defaults_to_zero():
         )
         lines = read_lines(os.path.join(tmpdir, 'umicounts.A.tsv'))
         expected = [
-            'feature\tfile1\tfile2',
-            '_unmapped\t0\t0', 
-            '_multimapping\t0\t0', 
-            '_no_feature\t0\t0', 
-            '_ambiguous\t0\t0', 
-            'geneX\t0\t0',
+            'samples\t_unmapped\t_multimapping\t_no_feature\t_ambiguous\tgeneX',
+            'file1\t0\t0\t0\t0\t0',
+            'file2\t0\t0\t0\t0\t0'
         ]
         assert lines == expected

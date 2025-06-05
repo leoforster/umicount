@@ -156,6 +156,8 @@ def umicount():
                         help="Number of cores for processing BAMs: each core processes 1 sample")
     parser.add_argument("-l", "--logfile", action="store", default=None,
                         help="Path to log file, defaults to standard output (sys.stdout)")
+    parser.add_argument("--tmp_dir", action="store", type=existing_dir, default=None,
+                        help="directory to save temporary files")
     parser.add_argument("-g", "--gtf", type=existing_file, help="input GTF file (ensembl format)")
     parser.add_argument("--GTF_dump", type=existing_dir, default=None, help="File path to dump parsed GTF data")
     parser.add_argument("--GTF_skip_parse", type=existing_file, default=None, help="Path to dumped GTF data")
@@ -202,6 +204,9 @@ def umicount():
         load_gtf_data(r.gtf, skipgtf=None, dumpgtf=r.GTF_dump)
         sys.exit()
 
+    if r.tmp_dir is None:
+        r.tmp_dir = r.output_dir
+
     # populate read types to count (as columns)
     basecols = []
     if r.combine_unspliced:
@@ -241,6 +246,7 @@ def umicount():
         gtf_data = load_gtf_data(r.gtf, skipgtf=r.GTF_skip_parse) # only need to load once
         process_bam_parallel(bamfiles, filedir, gtf_data, num_workers=r.cores,
                              cols_to_use=basecols, 
+                             tmp_dir=r.tmp_dir,
                              min_read_mapQ=r.min_read_mapQ,
                              count_primary=r.mm_count_primary,
                              multiple_primary_action=r.multiple_primary_action,
