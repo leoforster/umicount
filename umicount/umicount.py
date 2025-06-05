@@ -42,12 +42,13 @@ class ReadCountConfig:
     umi_correct: bool = False
     countratio_threshold: int = 2
     hamming_threshold: int = 1
-    tmp_dir = os.getcwd()
+    tmp_dir str = ''
 
     def __post_init__(self):
         assert validate_cols_to_use(self.cols_to_use)
         self.combine_unspliced = 'U' in self.cols_to_use
         self.do_dedup = 'D' in self.cols_to_use
+        if self.tmp_dir == '': self.tmp_dir = None
 
 def validate_cols_to_use(cols):
     # because cols_to_use values direct downstream logic inplace of function args
